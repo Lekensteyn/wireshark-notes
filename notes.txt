@@ -1,0 +1,105 @@
+/tmp/wireshark/configure --prefix=/tmp/wsroot --with-ssl --with-gtk2 --without-gtk3
+
+# find which suites are not supported yet (unsupported.txt)
+awk -vsrc=/tmp/wireshark/epan/dissectors/packet-ssl-utils.c -F'[ {,]+' 'BEGIN{while(getline <src)if(/^ *\{.*,KEX_/)a[$2]=1}{if(!a[$1])print}' suites.txt
+# find which ciphers openssl supports
+openssl ciphers -V | awk -F'[, ]+' '{print $2, $3, $5}' | while read n1 n2 name; do echo $(($n1*0x100 + $n2)) $name;done|sort -n > openssl-supported-ciphers.txt
+# find which ciphers are not yet supported (unsupported-new is from above)
+grep -E "$(cut -d' ' -f1 unsuppported-new.txt  openssl-supported-ciphers.txt | sort | uniq -d | tr '\n' '|' | sed 's/|$//')" unsuppported-new.txt -w
+
+
+# command to use key file from NSS
+/tmp/wsroot/bin/wireshark -o ssl.keylog_file:$PWD/s_client-keys.txt s_client.capng -o http.ssl.port:4433 -o ssl.debug_file:s_client-debug.txt
+
+# Command to look for relation between cipher and mode (stream vs cbc)
+grep epan/dissectors/packet-ssl-utils.c -e '^ *{.*,KEX' | column -s, -t | sort -k 4,4 -k 11,11
+Bugs:
+- DES is a block cipher, this should probably become block instead of stream:
+    {98     KEX_RSA  SIG_RSA   ENC_DES          8   64   64   DIG_SHA     20  1   SSL_CIPHER_MODE_STREAM}  
+- RC4 is a stream cipher, (block size = 1, not 16)
+    /*{138  KEX_PSK  SIG_RSA   ENC_RC4          16  128  128  DIG_SHA     20  0   SSL_CIPHER_MODE_CBC}     */
+- length for a signature was wrong (16 should be 20)
+    {99     KEX_DH   SIG_DSS   ENC_DES          8   64   64   DIG_SHA     16  1   SSL_CIPHER_MODE_CBC}     
+- IDEA is a block cipher ### VERIFIED
+#   {7      KEX_RSA  SIG_RSA   ENC_IDEA         8   128  128  DIG_SHA     20  0   SSL_CIPHER_MODE_STREAM}  
+- shouldn't a stream cipher operate on a block of 1? One of the two is wrong...
+    {6      KEX_RSA  SIG_RSA   ENC_RC2          8   128  40   DIG_SHA     20  1   SSL_CIPHER_MODE_STREAM}  
+    {97     KEX_RSA  SIG_RSA   ENC_RC2          1   128  56   DIG_MD5     16  1   SSL_CIPHER_MODE_STREAM}  
+- 27 is TLS_DH_anon_WITH_3DES_EDE_CBC_SHA, should become DIG_SHA,20
+     {27,KEX_DH,SIG_NONE,ENC_3DES,8,192,192,DIG_MD5,16,0, SSL_CIPHER_MODE_CBC},
+
+# pipe openssl
+stdbuf -oL openssl s_server -CAfile server.crt -cert server.crt -key server.pem -www -cipher ALL 2>&1 | awk '/ACCEPT/{print (++n) " " $0}!/ACCEPT/{print}{fflush()}'
+openssl ciphers | tr : '\n' > ciphers.txt
+# trigger tests:
+openssl ciphers|tr : '\n' | while read i;do echo;echo $i;curl --cacert /tmp/snif/pki/server.crt https://localhost:4433 -o /dev/null --ciphers $i -v;done
+# "fail" file is above output
+awk 'BEGIN{while(getline<"fail"){if(/ACCEPT/){n=$1}else if(/error/){fails[n]=1}}} {if(!fails[NR])print}' ciphers.txt
+
+
+# convert CipherSuite from RFC to code
+xsel | ./generate-wireshark-cs | sed s/{/,/ | sort -t, -n -k2,2 | sed s/,/{/
+# check for differences between existing ciphers and new ones from X clipboard
+ssort(){ sed s/{/,/ | sort -t, -k2,2 | sed s/,/{/; }
+grep ,KEX_ packet-ssl-utils.c | ssort > 1;(cat 1; xsel) | sort -t} -u | ssort > 2; colordiff -u 1 2
+
+
+# dump CLIENT_RANDOM for every cipher
+openssl ciphers|tr : '\n' | grep -vE '^(PSK|SRP|ECDHE-ECDSA|ECDH)-|-DSS-' | while read cipher; do (echo 'GET / HTTP/1.0';sleep .1) | openssl s_client -connect localhost:4433 -cipher $cipher -msg 2>&1 | awk '/Master-Key:/{key=$2} {b=1;e=16;if(l==3)b=7;if(l==1)e=6;for(i=b;i<=e;i++)s=s$i;if(l--==1)r[s]=1}/ ClientHello|ServerHello$/{l=3;s=""} END{for(rnd in r)print "CLIENT_RANDOM",rnd,key}';done > all/s_client-keys.txt
+# dump CLIENT_RANDOM for every cipher for *.local.al.lekensteyn.nl with TLS disabled
+for url in $(grep -E '/(IDEA-CBC-SHA|EXP-RC2-CBC-MD5)\.' -i ssl3/ok.txt); do host="${url##*/}"; (printf "GET / HTTP/1.1\r\nHost: $host\r\n\r\n";sleep .2) | openssl s_client -connect "$host" -CApath /etc/nginx/certs -no_tls1 -msg 2>&1 | awk '/Master-Key:/{key=$2} {b=1;e=16;if(l==3)b=7;if(l==1)e=6;for(i=b;i<=e;i++)s=s$i;if(l--==1)r[s]=1}/ ClientHello|ServerHello$/{l=3;s=""} END{for(rnd in r)print "CLIENT_RANDOM",rnd,key}'; done >> /tmp/snif/ssl3/premaster.txt
+
+# fetch a list of hosts to visit
+</etc/nginx/sites/ciphertest.conf awk -F '[:; ]+' '/listen/{port=$4}/server_name/&&$5{print "https://"$5":"port}' > urls.txt
+# Get good and bad cipher suites wrt web server certs
+rm ok.txt nok.txt;time while read url; do curl -ks "$url" -o /dev/null && echo $url >> ok.txt || echo $url >> nok.txt;done < urls.txt
+# same as above, but restrict to OpenSSL ciphers during request
+rm ok.txt nok.txt;time while read url; do cipher="${url%%.*}";cipher="${cipher##*/}";curl -ks "$url" -o /dev/null --ciphers "${cipher^^}" && echo $url >> ok.txt || echo $url >> nok.txt;done < urls.txt
+# same test, but using openssl instead of curl
+for url in $(cat res/ok.txt); do host="${url##*/}"; echo;echo;echo _____ $host;(printf "GET / HTTP/1.1\r\nHost: $host\r\n\r\n";sleep .2) | openssl s_client -connect "$host" -CApath /etc/nginx/certs; done 2>&1 | tee s_client-all-res-ok.txt
+
+# filter non-working ciphers (missing certs)
+grep -vE '^(PSK|SRP|DHE-DSS|ECDHE-ECDSA|ECDH)-'
+
+Non-working ciphers can be grouped into:
+- DHE-DSS, EDH-DSS, EXP-EDH-DSS
+- ECDHE-ECDSA
+
+Not supported by GnuTLS (source:
+http://backreference.org/2009/11/18/openssl-vs-gnutls-cipher-names/)
+- TLS-SRP (Secure Remote Password)
+- PSK (Pre-Shared Key)
+- ECDH-{RSA,ECDSA} (not ECDHE-RSA) (source: wikipedia)
+
+
+Missing support:
+- GCM
+0xC0,0x30    ECDHE-RSA-AES256-GCM-SHA384
+0x00,0x9F      DHE-RSA-AES256-GCM-SHA384
+0x00,0x9D              AES256-GCM-SHA384
+0xC0,0x2F    ECDHE-RSA-AES128-GCM-SHA256
+0x00,0x9E      DHE-RSA-AES128-GCM-SHA256
+0x00,0x9C              AES128-GCM-SHA256
+- ECDHE-RSA
+0xC0,0x13           ECDHE-RSA-AES128-SHA
+0xC0,0x14           ECDHE-RSA-AES256-SHA
+0xC0,0x12         ECDHE-RSA-DES-CBC3-SHA
+
+(not tested: DSS)
+- cipher suites from `RFC 5246 - TLS 1.2` are verified with the script
+- cipher suites 150-155 are taken from: RFC 4162 - SEED for TLS
+- cipher suites 156-167 are taken from: RFC 5288 - AES-GCM Cipher suites
+- cipher suites 49153-49177 are taken from: RFC 4492 - ECC for TLS
+- cipher suites 49195-49202 are taken from RFC 5289 - ECC with
+  SHA256/384 and AES GCM
+
+
+# Generate dsa params, privkey and signed pubkey
+openssl dsaparam 1024 -out dsaparam.pem
+openssl gendsa dsaparam.pem -out dsa.pem
+openssl req -new -key dsa.pem -x509 -days 3650 -out dsa.crt -subj "/CN=*.local.al.lekensteyn.nl"
+# Generete EC params (secp112r1 cert does not work, "no shared cipher" error)
+# secp256r1 is supported by chromium (and secp{384,521}r1 too)
+openssl ecparam -name prime192v1 -out ec.pem -genkey
+openssl req -new -key ec.pem -x509 -days 3650 -out ec.crt -subj "/CN=*.local.al.lekensteyn.nl/OU=EC"
+

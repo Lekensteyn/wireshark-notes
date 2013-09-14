@@ -1,0 +1,364 @@
+#!/bin/bash
+# Generate nginx config and HTML for testing ciphers
+# Author: Peter Wu <lekensteyn@gmail.com>
+
+#domain=ciphertest.lekensteyn.nl
+# ssl-enabled ip:port, may occur multiple times space-separated
+# PORT will be replaced for a number that increments for every test
+#listen=$domain:PORT
+domain=${1:-local.al.lekensteyn.nl}
+address=localhost
+listen="$address:4433 $address:PORT "
+portbase=4433
+
+pkdir=certs/
+rsa_prv=server.pem
+rsa_pub=server.crt
+dsa_prv=dsa.pem
+dsa_pub=dsa.crt
+#ecc_prv=ec.pem
+#ecc_pub=ec.crt
+ecc_prv=secp384r1.pem
+ecc_pub=secp384r1.crt
+dh_params=dhparams.pem
+
+root=/srv/http/ciphertest
+html="$root/index.html"
+
+get_ciphers() {
+    # output: index (n1 << 8 | n2) name version auth line
+    openssl ciphers -V | sort -n |
+        awk -F'[ ,]+' '{ print ++i, $2, $3, $5, $6, substr($8, 4), $0 }'
+}
+htmlescape() {
+    sed 's/&/&amp;/g;s/</\&lt/g;s/>/\&gt;/g'
+}
+
+#if [ ! -s "$html" ]; then
+if true; then # always generate file
+cat > "$html" <<EOF
+<!doctype html>
+<html>
+<head>
+<meta charset=utf-8>
+<title>Cipher suite test</title>
+<style>
+iframe {
+    width: 800px;
+    height: 1.5em;
+    display: block;
+}
+label {
+    font-family: monospace;
+}
+#openssl-version {
+    white-space: pre-line;
+    font-family: monospace;
+}
+.cipher-unknown {
+    background-color: #ccc;
+}
+.cipher-ok {
+    background-color: lightgreen;
+}
+.cipher-nok {
+    background-color: pink;
+}
+#hide-unknown:checked ~ #opts .cipher-unknown,
+#hide-nok:checked ~ #opts .cipher-nok,
+#hide-ok:checked ~ #opts .cipher-ok,
+#hide-checks:checked ~ #opts input[type=checkbox],
+#hide-frames:checked ~ #opts iframe {
+    display: none;
+}
+</style>
+</head>
+<body>
+
+<div id="openssl-version">
+$(openssl version -a | htmlescape)
+</div>
+
+<form id="frm" action="javascript:">
+    <label><input type="checkbox" id="toggle-all">Toggle all</label>
+
+    <button id="delayed_executor">Check boxes (delayed)</button>
+
+    <input type="checkbox" id="hide-frames">
+    <label for="hide-frames">Hide frames</label>
+
+    <input type="checkbox" id="hide-checks">
+    <label for="hide-checks">Hide checkboxes</label>
+
+    <br>
+    Hide cipher suites:
+
+    <input type="checkbox" id="hide-unknown">
+    <label for="hide-unknown">Hide unknown</label>
+
+    <input type="checkbox" id="hide-nok">
+    <label for="hide-nok">Hide nok</label>
+
+    <input type="checkbox" id="hide-ok">
+    <label for="hide-ok">Hide ok</label>
+
+    <fieldset id="opts">
+    </fieldset>
+</form>
+
+<script>
+"use strict";
+var ciphers = [
+$(get_ciphers | while read i n1 n2 name version auth line; do
+    printf '{number:%s, name:"%s", version:"%s", auth:"%s", port:%i},\n' \
+        $((n1*0x100+n2)) "$name" "$version" "$auth" $((portbase + i))
+done)
+];
+var opts = document.getElementById("opts");
+var toggler = document.getElementById("toggle-all");
+var frame_path = "/";
+
+document.domain = "$domain";
+
+function frame_handler(ev) {
+    var ifr = document.getElementById("ifr-" + this.value);
+    var port = this.dataset.port;
+    var url = "//" + this.value + ".$domain:" + port + frame_path;
+    ifr.src = this.checked ? url : "";
+}
+
+function toggle_handler(ev) {
+    var opts = document.getElementsByClassName("cipher-choices");
+    for (var i = 0; i < opts.length; i++) {
+        if (this.checked != opts[i].checked)
+            opts[i].click();
+    }
+}
+
+(function (trigger) {
+    var delayer = null;
+    var current_index;
+    var opts = document.getElementsByClassName("cipher-choices");
+
+    function stop_delayer() {
+        clearInterval(delayer);
+        delayer = null;
+    }
+
+    function delayed_opener() {
+        if (current_index < opts.length) {
+            if (!opts[current_index].checked)
+                opts[current_index].click();
+
+            current_index++;
+        } else {
+            stop_delayer();
+            toggler.checked = true;
+        }
+    }
+
+    function start_timer(interval) {
+        if (delayer) {
+            console.log("Timer already active");
+            return;
+        }
+
+        current_index = 0;
+        delayer = setInterval(delayed_opener, interval);
+    }
+
+    trigger.addEventListener("click", function (ev) {
+        var interval = parseInt(prompt("Delay (msec). 0 is stop", 300));
+        if (isNaN(interval) || interval < 0) {
+            console.log("Invalid interval - ignoring");
+            return;
+        }
+
+        if (interval > 0)
+            start_timer(interval);
+        else
+            stop_delayer();
+    });
+})(document.getElementById("delayed_executor"));
+
+function get_container_for_frame(ifr) {
+    return document.getElementById("ctr-" + ifr.id.replace("ifr-", ""));
+}
+
+function frame_loaded() {
+    var ctr = get_container_for_frame(this);
+    var cipher = ctr.dataset.cipher.toLowerCase();
+    var cipherFound = null;
+
+    if (!this.src) {
+        return;
+    }
+
+    console.log("Loaded: " + this.src);
+    try {
+        var line = this.contentDocument.body.firstChild.textContent;
+        cipherFound = line.toLowerCase().indexOf(cipher) != -1;
+        console.log("looking for '" + cipher + "' in: " + line);
+    } catch (ex) {
+        console.log(ex);
+    }
+
+    if (cipherFound === null) {
+        ctr.className = "cipher-unknown";
+    } else if (cipherFound) {
+        ctr.className = "cipher-ok";
+    } else {
+        ctr.className = "cipher-nok";
+    }
+}
+function frame_error() {
+    var ctr = get_container_for_frame(this);
+
+    console.log("Error while loading: " + this.src);
+    ctr.className = "cipher-nok";
+}
+
+toggler.addEventListener("change", toggle_handler);
+
+ciphers.forEach(function (cipher, i) {
+    var container = document.createElement("div");
+    container.id = "ctr-" + cipher.name;
+    container.dataset.cipher = cipher.name;
+    container.className = "cipher-unknown";
+
+    var hexid = "0x" + ("000" + cipher.number.toString(16)).substr(-4).toUpperCase();
+
+    var lbl = document.createElement("label");
+    lbl.id = "lbl-" + cipher.name;
+    lbl.textContent = hexid + " " + cipher.name + " (" + cipher.version +
+        ", Au=" + cipher.auth + ") #" + i;
+
+    var opt = document.createElement("input");
+    opt.type = "checkbox";
+    opt.value = cipher.name;
+    opt.dataset.port = cipher.port;
+    opt.className = "cipher-choices";
+    opt.addEventListener("change", frame_handler);
+    lbl.insertBefore(opt, lbl.firstChild);
+
+    var ifr = document.createElement("iframe");
+    ifr.id = "ifr-" + cipher.name;
+    ifr.onload = frame_loaded;
+    ifr.onerror = frame_error;
+
+    container.appendChild(ifr);
+    container.appendChild(lbl);
+
+    opts.appendChild(container);
+});
+</script>
+
+</body>
+</html>
+EOF
+fi
+
+# Begin nginx config generator
+
+get_common() {
+    local auth=$1
+    local port=${2:-$portbase}
+    local crtfile keyfile dhpfile
+
+    case $auth in
+    RSA)
+        crtfile=$rsa_pub
+        keyfile=$rsa_prv
+        ;;
+    ECDH)
+        # Note: NSS does not support all cipher suites from OpenSSL, but OpenSSL
+        # cannot work with ECDH-RSA using th below certificates.
+        crtfile=$ecc_pub
+        keyfile=$ecc_prv
+        #dhpfile=$dh_params
+        ;;
+    DSS)
+        crtfile=$dsa_pub
+        keyfile=$dsa_prv
+        ;;
+    ECDSA)
+        crtfile=$ecc_pub
+        keyfile=$ecc_prv
+        #dhpfile=$dh_params
+        ;;
+    PSK)
+        #echo "Unknown Au=$auth - using RSA" >&2
+        crtfile=$rsa_pub
+        keyfile=$rsa_prv
+        ;;
+    *)
+        echo "Unknown Au=$auth - using RSA" >&2
+        crtfile=$rsa_pub
+        keyfile=$rsa_prv
+        ;;
+    esac
+
+    local listens l
+    listens=$(echo ${listen//PORT/$port} | tr ' ' '\n' | sort -u | tr '\n' ' ')
+    for l in $listens; do
+        echo "    listen $l ssl;"
+    done
+
+cat <<EOF
+    ssl_certificate $pkdir$crtfile;
+    ssl_certificate_key $pkdir$keyfile;
+EOF
+    [ -z "$dhpfile" ] || cat <<EOF
+    ssl_dhparam $pkdir$dhpfile;
+EOF
+cat <<EOF
+    ssl_prefer_server_ciphers on;
+    expires epoch;
+    keepalive_timeout 0s;
+    root $root;
+EOF
+}
+cat <<EOF
+server {
+$(get_common RSA)
+    default_type "text/plain";
+    access_log off;
+    return 200 "Invalid host - is SNI enabled?";
+}
+
+server {
+$(get_common RSA)
+    server_name $domain www.$domain;
+}
+
+EOF
+
+# WARNING: BROKEN CONFIG for server blocks sharing same listen address and port.
+# If SNI is not available, the first server block will be loaded for
+# certificates and ciphers. Once the host (via Host header) is known, it will
+# return the "OK" response.
+
+get_ciphers |
+while read i n1 n2 name version auth line; do
+    num=$(($n1*0x100 + $n2)) # 49169
+    hex=$n1${n2:2} # 0xC011
+
+    cat <<EOF
+server { # cipher suite #$i
+$(get_common $auth $((portbase+i)))
+    server_name ${hex,,}.$domain $num.$domain ${name,,}.$domain;
+    ssl_ciphers -ALL:$name;
+    #ssl_protocols $version;
+    default_type "text/html";
+    access_log off;
+    location = / {
+        return 200 "$line<script>document.domain='$domain'</script>";
+    }
+}
+
+EOF
+done
+
+cat <<EOF
+# vim: set et sw=4 ts=4:
+EOF

@@ -1,0 +1,6 @@
+https://exp-rc4-md5.local.al.lekensteyn.nl:4434
+https://rc4-md5.local.al.lekensteyn.nl:4435
+https://rc4-sha.local.al.lekensteyn.nl:4436
+https://ecdh-ecdsa-rc4-sha.local.al.lekensteyn.nl:4479
+https://ecdhe-ecdsa-rc4-sha.local.al.lekensteyn.nl:4483
+https://ecdhe-rsa-rc4-sha.local.al.lekensteyn.nl:4491

@@ -1,0 +1,160 @@
+#!/bin/bash
+# Quick 'n' dirty generator for extending wireshark cipher suites
+# Author: Peter Wu <lekensteyn@gmail.com>
+
+set -u
+
+p() {
+	local tmp kex sig keysize dig diglen mode us_export blocksize
+	[ $# -gt 0 ] || return
+	num=$(($2*0x100 + $3))
+
+	tmp=${1%%_WITH_*}
+	tmp=${tmp#TLS_}
+	case $tmp in
+	RSA)		kex=RSA ;;
+	DH_*|DHE_*)	kex=DH ;;
+	ECDH_*|ECDHE_*)	kex=DH ;;
+	*)
+		echo "Unknown kex in $1 (tmp=$tmp)" >&2
+		return
+		;;
+	esac
+
+	tmp=${1%%_WITH_*}
+	tmp=${tmp#TLS_}
+	tmp=${tmp#EC}
+	tmp=${tmp#DH_}
+	tmp=${tmp#DHE_}
+	case $tmp in
+	RSA|DSS)	sig=$tmp ;;
+	ECDSA)		sig=DSS ;;
+	anon)		sig=NONE ;;
+	*)
+		echo "Unknown sig in $1 (tmp=$tmp)" >&2
+		return
+		;;
+	esac
+
+	# HACK HACK HACK
+	tmp=${1#*WITH_}
+	cipher=${tmp%%_*}
+	tmp=${tmp#${cipher}_} # now continue for keysize
+	keysize=${tmp%%_*}
+	[[ $keysize != [0-9]* ]] || cipher=$cipher$keysize
+	case $cipher in
+	*128|*256) ;;
+	SEED)	keysize=128 ;;
+	NULL)	keysize=0 ;;
+	3DES)
+		if [[ $keysize == EDE ]]; then
+			keysize=192
+		else
+			echo "Invalid keysize in $1 (cipher=$cipher, keysize=$keysize)" >&2
+			#return
+		fi
+		;;
+	*)
+		echo "Invalid keysize in $1 (cipher=$cipher, keysize=$keysize)" >&2
+		#return
+		;;
+	esac
+
+	case $cipher in
+	AES128)
+		cipher=AES
+		;;
+	DES|3DES|RC4|RC2|IDEA|AES256|CAMELLIA128|CAMELLIA256|NULL) ;;
+	SEED*)	cipher=SEED ;;
+	RC4128)	cipher=RC4 ;;
+	*)
+		echo "Unknown cipher $cipher" >&2
+		return
+		;;
+	esac
+
+	case $cipher in
+	AES|AES256|CAMELLIA128|CAMELLIA256|SEED)
+		blocksize=16 ;;
+	DES|3DES)
+		blocksize=8 ;;
+	RC2|RC4|NULL)
+		blocksize=1 ;;
+	*)
+		echo "Unknown cipher $cipher" >&2
+		return
+		;;
+	esac
+
+	dig=${1##*_}
+	case $dig in
+	MD5)	diglen=16 ;;
+	SHA)	diglen=20 ;;
+	SHA256)	diglen=32 ;;
+	SHA384) diglen=48 ;;
+	*)
+		echo "Unknown dig in $1 (dig=$dig)" >&2
+		return
+		;;
+	esac
+
+	us_export=0
+
+	# mode=STREAM
+	case $cipher in
+	AES|AES256|DES|3DES|CAMELLIA128|CAMELLIA256|SEED)
+		mode=CBC ;;
+	RC2|RC4|NULL)
+		mode=STREAM ;;
+	*)
+		echo "Unknown mode in $1 (cipher=$cipher)" >&2
+		return
+		;;
+	esac
+
+cat <<EOF
+    {$num,KEX_$kex,SIG_$sig,ENC_$cipher,$blocksize,$keysize,$keysize,DIG_$dig,$diglen,$us_export, SSL_CIPHER_MODE_$mode},   /* $1 */
+EOF
+}
+
+# expects a line like:
+#  CipherSuite TLS_RSA_WITH_CAMELLIA_128_CBC_SHA         = { 0x00,0x41 };
+sed 's/CipherSuite//;s/,/ /g' | grep -v '^[ \t]*$' | tr -d '={};' | while read name n1 n2 rem; do
+	if [ -n "$rem" ]; then
+		echo "Error! Invalid line: $name $n1 $n2 $rem" >&2
+		continue
+	fi
+	p "$name" "$n1" "$n2"
+done
+exit
+
+# from http://tools.ietf.org/html/rfc5932, Proposed Cipher Suites
+
+p TLS_RSA_WITH_CAMELLIA_128_CBC_SHA         0x00 0x41
+p TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA      0x00 0x42
+p TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA      0x00 0x43
+p TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA     0x00 0x44
+p TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA     0x00 0x45
+p TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA     0x00 0x46
+p 
+p TLS_RSA_WITH_CAMELLIA_256_CBC_SHA         0x00 0x84
+p TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA      0x00 0x85
+p TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA      0x00 0x86
+p TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA     0x00 0x87
+p TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA     0x00 0x88
+p TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA     0x00 0x89
+p 
+p 
+p TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256      0x00 0xBA
+p TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256   0x00 0xBB
+p TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256   0x00 0xBC
+p TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256  0x00 0xBD
+p TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256  0x00 0xBE
+p TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256  0x00 0xBF
+p 
+p TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256      0x00 0xC0
+p TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256   0x00 0xC1
+p TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256   0x00 0xC2
+p TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256  0x00 0xC3
+p TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256  0x00 0xC4
+p TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256  0x00 0xC5
