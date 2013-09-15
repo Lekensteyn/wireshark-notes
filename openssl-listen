@@ -6,8 +6,10 @@ rsa_prv=server.pem
 rsa_pub=server.crt
 dsa_prv=dsa.pem
 dsa_pub=dsa.crt
-ecc_prv=secp384r1.pem
-ecc_pub=secp384r1.crt
+ecd_prv=secp384r1-dsa.pem
+ecd_pub=secp384r1-dsa.crt
+ecc_prv=secp384r1-rsa.pem
+ecc_pub=secp384r1-rsa.crt
 
 pkdir=$1
 portbase=${2:-4430}
@@ -27,13 +29,24 @@ if ! mkdir -p "$pkdir"; then
     exit 1
 fi
 
+set -u
+
 pids=()
 
 gen_pk() {
-    local type keyfile crtfile
+    local type keyfile crtfile x509_opts ca_key ca_crt
     type=$1
     keyfile=$2
     crtfile=$3
+    # only necessary
+    ca_key=$4
+    ca_crt=$5
+
+    if [ -n "$ca_key" ]; then
+        x509_opts=(-CA "$ca_crt" -CAkey "$ca_key" -set_serial 1$RANDOM)
+    else
+        x509_opts=(-signkey "$keyfile")
+    fi
 
     case $type in
     RSA)
@@ -42,18 +55,24 @@ gen_pk() {
     DSS)
         openssl dsaparam 1024 | openssl gendsa /dev/stdin -out "$keyfile"
         ;;
-    ECDH|ECDSA)
-        openssl ecparam -name prime192v1 -out "$keyfile" -genkey
+    ECDSA)
+        openssl ecparam -name secp384r1 -out "$keyfile" -genkey
+        ;;
+    ECDH)
+        openssl ecparam -name secp384r1 -out "$keyfile" -genkey
         ;;
     *)
         echo "Invalid cert type $type" >&2
         return 1
     esac
-    openssl req -new -key "$keyfile" -x509 -days 3650 -out "$crtfile" -subj "/CN=Test Certificate $type"
+
+    openssl req -new -key "$keyfile" -subj "/CN=Test Certificate $type" |
+        openssl x509 -req -days 3650 -out "$crtfile" \
+        "${x509_opts[@]}"
 }
 
 start_server() {
-    local keyfile crtfile port auth
+    local keyfile crtfile port auth ca_key= ca_crt=
     auth=$1
 
     case $auth in
@@ -62,15 +81,22 @@ start_server() {
         keyfile=$rsa_prv
         port=$portbase
         ;;
-    ECDH|ECDSA)
+    ECDSA)
+        crtfile=$ecd_pub
+        keyfile=$ecd_prv
+        port=$((portbase+1))
+        ;;
+    ECDH)
         crtfile=$ecc_pub
         keyfile=$ecc_prv
-        port=$((portbase+1))
+        ca_key=$pkdir$rsa_prv
+        ca_crt=$pkdir$rsa_pub
+        port=$((portbase+2))
         ;;
     DSS)
         crtfile=$dsa_pub
         keyfile=$dsa_prv
-        port=$((portbase+2))
+        port=$((portbase+3))
         ;;
     *)
         echo "Invalid cert type $auth" >&2
@@ -79,7 +105,9 @@ start_server() {
     esac
 
     if [ ! -e "$pkdir$crtfile" ]; then
-        gen_pk "$auth" "$pkdir$keyfile" "$pkdir$crtfile" || return 1
+        gen_pk "$auth" \
+            "$pkdir$keyfile" "$pkdir$crtfile" \
+            "$ca_key" "$ca_crt" || return 1
     fi
 
     openssl s_server -accept $port \
@@ -95,7 +123,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for auth in RSA ECDH DSS; do
+for auth in RSA ECDSA ECDH DSS; do
     start_server $auth
 done
 

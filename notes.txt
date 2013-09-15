@@ -59,7 +59,7 @@ rm ok.txt nok.txt;time while read url; do cipher="${url%%.*}";cipher="${cipher##
 for url in $(cat res/ok.txt); do host="${url##*/}"; echo;echo;echo _____ $host;(printf "GET / HTTP/1.1\r\nHost: $host\r\n\r\n";sleep .2) | openssl s_client -connect "$host" -CApath /etc/nginx/certs; done 2>&1 | tee s_client-all-res-ok.txt
 
 
-The following OpenSSL cipher suites do not connect to nginx:
+The following OpenSSL cipher suites do not connect to nginx (obsolete):
 EXP-EDH-DSS-DES-CBC-SHA
 EXP-EDH-RSA-DES-CBC-SHA
 PSK-RC4-SHA
@@ -84,7 +84,7 @@ ECDH-RSA-AES256-GCM-SHA384
 Groupable to:
 - EXP-EDH-{DSS,RSA}
 - PSK
-- ECDH-RSA
+- ECDH-RSA (obsolete, it is supported with correct cert)
 - SRP
 
 Not supported by GnuTLS (source:
