@@ -46,25 +46,34 @@ s_client_client_random() {
 
 # When stdin is a TTY, try all ciphers
 if [ -t 0 ]; then
-    openssl ciphers -V | awk '{print $3, substr($5, 4), substr($6, 4)}'
+    openssl ciphers -V
 else
-    # otherwise if not TTY, pass-through
+    # otherwise if not TTY, pass-through (useful for grep)
     cat
 fi |
-while read cipher keyex auth; do
-    case $keyex,$auth in
-    *,RSA)
-        port=$portbase ;;
-    ECDH/ECDSA,ECDH|*,ECDSA)
+awk '# Look for something like ECDHE-RSA-AES256-SHA
+{
+    for (i = 1; i <= NF; i++) {
+        if ($i ~ /.-./) {
+            print $i;
+            break
+        }
+    }
+}' |
+while read cipher; do
+    case $cipher in
+    *-ECDSA-*)
         port=$((portbase+1)) ;;
-    ECDH/RSA,ECDH)
+    ECDH-RSA-*)
         port=$((portbase+2)) ;;
-    *,DSS)
+    *-DSS-*)
         port=$((portbase+3)) ;;
-    *,PSK|*)
-        echo "Skipping unsupported $auth" >&2
+    PSK-*)
+        echo "Skipping unsupported PSK" >&2
         continue
         ;;
+    *-RSA-*|*) # assume RSA (includes name like RC4-SHA)
+        port=$portbase ;;
     esac
 
     echo "# Cipher Suite $cipher"
