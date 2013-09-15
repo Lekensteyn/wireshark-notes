@@ -1,0 +1,104 @@
+#!/bin/bash
+# Set-up OpenSSL servers with test keys for EC, DSA and RSA.
+# Author: Peter Wu <lekensteyn@gmail.com>
+
+rsa_prv=server.pem
+rsa_pub=server.crt
+dsa_prv=dsa.pem
+dsa_pub=dsa.crt
+ecc_prv=secp384r1.pem
+ecc_pub=secp384r1.crt
+
+pkdir=$1
+portbase=${2:-4430}
+
+if [ -z "$pkdir" ]; then
+    cat <<EOF
+Usage: $0 path-to-certsdir [port base]"
+openssl s_client will listen on three ports,
+starting at 'port base' (default 4430)
+EOF
+    exit 1
+fi
+[[ $pkdir == */ ]] || pkdir+=/
+
+if ! mkdir -p "$pkdir"; then
+    echo "Could not create directory $pkdir" >&2
+    exit 1
+fi
+
+pids=()
+
+gen_pk() {
+    local type keyfile crtfile
+    type=$1
+    keyfile=$2
+    crtfile=$3
+
+    case $type in
+    RSA)
+        openssl genrsa -out "$keyfile"
+        ;;
+    DSS)
+        openssl dsaparam 1024 | openssl gendsa /dev/stdin -out "$keyfile"
+        ;;
+    ECDH|ECDSA)
+        openssl ecparam -name prime192v1 -out "$keyfile" -genkey
+        ;;
+    *)
+        echo "Invalid cert type $type" >&2
+        return 1
+    esac
+    openssl req -new -key "$keyfile" -x509 -days 3650 -out "$crtfile" -subj "/CN=Test Certificate $type"
+}
+
+start_server() {
+    local keyfile crtfile port auth
+    auth=$1
+
+    case $auth in
+    RSA)
+        crtfile=$rsa_pub
+        keyfile=$rsa_prv
+        port=$portbase
+        ;;
+    ECDH|ECDSA)
+        crtfile=$ecc_pub
+        keyfile=$ecc_prv
+        port=$((portbase+1))
+        ;;
+    DSS)
+        crtfile=$dsa_pub
+        keyfile=$dsa_prv
+        port=$((portbase+2))
+        ;;
+    *)
+        echo "Invalid cert type $auth" >&2
+        return 1
+        ;;
+    esac
+
+    if [ ! -e "$pkdir$crtfile" ]; then
+        gen_pk "$auth" "$pkdir$keyfile" "$pkdir$crtfile" || return 1
+    fi
+
+    openssl s_server -accept $port \
+        -cert "$pkdir$crtfile" -key "$pkdir$keyfile" -www &
+    pids+=($!)
+}
+
+cleanup() {
+    if [ ${#pids[@]} -gt 0 ]; then
+        echo "Killing: ${pids[*]}"
+        kill "${pids[@]}"
+    fi
+}
+trap cleanup EXIT
+
+for auth in RSA ECDH DSS; do
+    start_server $auth
+done
+
+wait
+
+# vim: set et sw=4 ts=4:

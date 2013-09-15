@@ -1,0 +1,64 @@
+#!/bin/bash
+# Connects to a SSL host for a list of ciphers
+# Author: Peter Wu <lekensteyn@gmail.com>
+
+host=${1:-localhost}
+portbase=${2:-4430}
+
+s_client_client_random() {
+    awk '
+    # match Master-Key from SSL Session dump
+    /Master-Key:/{key=$2}
+    {
+        b=1;e=16;
+        if(l==3)b=7;
+        if(l==1)e=6;
+        for (i = b; i <= e; i++)
+            s=s$i;
+
+        # at the end, save random value in map r
+        if (l--==1)
+            r[s]=1
+    }
+
+    # Match block containing Crandom bytes (over three lines)
+    / ClientHello|ServerHello$/{l=3;s=""}
+
+    END{
+        for (rnd in r) {
+            if (key)
+                print "CLIENT_RANDOM", rnd, key
+            else
+                print "# No master key for random", rnd
+        }
+    }'
+}
+
+# When stdin is a TTY, try all ciphers
+if [ -t 0 ]; then
+    openssl ciphers -V | awk '{print $3, substr($6, 4)}'
+else
+    # otherwise if not TTY, pass-through
+    cat
+fi |
+while read cipher auth; do
+    case $auth in
+    RSA)
+        port=$portbase ;;
+    ECDH|ECDSA)
+        port=$((portbase+1)) ;;
+    DSS)
+        port=$((portbase+2)) ;;
+    PSK|*)
+        echo "Skipping unsupported $auth" >&2
+        continue
+        ;;
+    esac
+
+    # It is expected that the other side closes the connection
+    printf "GET / HTTP/1.0\r\n\r\n" |
+    openssl s_client -connect "$host:$port" -ign_eof -cipher "$cipher" \
+        -msg 2>&1 | s_client_client_random
+done
+
+# vim: set et sw=4 ts=4:
