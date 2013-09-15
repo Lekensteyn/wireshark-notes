@@ -4,24 +4,45 @@
 
 set -u
 
+warn() {
+	local cb= ce=
+
+	# add color only if printing to terminal
+	if [ -t 2 ]; then
+		cb='\e[1;91m' # bright red
+		ce='\e[m'
+	fi
+
+	printf "$cb%s$ce\n" "$*" >&2
+}
+
 p() {
-	local tmp kex sig keysize dig diglen mode us_export blocksize
+	local tmp kex sig keysize exp_keysize=0 dig diglen mode us_export blocksize hexid
 	[ $# -gt 0 ] || return
 	num=$(($2*0x100 + $3))
+	hexid=000$(echo "obase=16;$num" | bc)
+	hexid=0x${hexid: -4}
+
+	# ignore TLS_NULL_WITH_NULL_NULL and TLS_EMPTY_RENEGOTIATION_INFO_SCSV
+	case $hexid in
+	0x0000|0x00FF) return ;;
+	esac
 
 	tmp=${1%%_WITH_*}
+	tmp=${tmp%_EXPORT}
 	tmp=${tmp#TLS_}
 	case $tmp in
 	RSA)		kex=RSA ;;
 	DH_*|DHE_*)	kex=DH ;;
 	ECDH_*|ECDHE_*)	kex=DH ;;
 	*)
-		echo "Unknown kex in $1 (tmp=$tmp)" >&2
+		warn "Unknown kex in $hexid $1 (tmp=$tmp)"
 		return
 		;;
 	esac
 
 	tmp=${1%%_WITH_*}
+	tmp=${tmp%_EXPORT}
 	tmp=${tmp#TLS_}
 	tmp=${tmp#EC}
 	tmp=${tmp#DH_}
@@ -31,7 +52,7 @@ p() {
 	ECDSA)		sig=DSS ;;
 	anon)		sig=NONE ;;
 	*)
-		echo "Unknown sig in $1 (tmp=$tmp)" >&2
+		warn "Unknown sig in $hexid $1 (tmp=$tmp)"
 		return
 		;;
 	esac
@@ -39,36 +60,44 @@ p() {
 	# HACK HACK HACK
 	tmp=${1#*WITH_}
 	cipher=${tmp%%_*}
+	tmp=${tmp/_CBC_/_}
 	tmp=${tmp#${cipher}_} # now continue for keysize
 	keysize=${tmp%%_*}
 	[[ $keysize != [0-9]* ]] || cipher=$cipher$keysize
 	case $cipher in
+	RC[24]40)	keysize=128; exp_keysize=40 ;;
 	*128|*256) ;;
-	SEED)	keysize=128 ;;
+	SEED|IDEA)	keysize=128 ;;
 	NULL)	keysize=0 ;;
+	DES)	keysize=64 ;;
+	DES40)	keysize=64; exp_keysize=40 ;;
 	3DES)
 		if [[ $keysize == EDE ]]; then
 			keysize=192
 		else
-			echo "Invalid keysize in $1 (cipher=$cipher, keysize=$keysize)" >&2
+			warn "Invalid keysize in $hexid $1 (cipher=$cipher, keysize=$keysize)"
 			#return
 		fi
 		;;
 	*)
-		echo "Invalid keysize in $1 (cipher=$cipher, keysize=$keysize)" >&2
-		#return
+		warn "Invalid keysize in $hexid $1 (cipher=$cipher, keysize=$keysize)"
+		return
 		;;
 	esac
+	# assume same size for actual and algorithm key size
+	[ $exp_keysize -gt 0 ] || exp_keysize=$keysize
 
 	case $cipher in
 	AES128)
 		cipher=AES
 		;;
-	DES|3DES|RC4|RC2|IDEA|AES256|CAMELLIA128|CAMELLIA256|NULL) ;;
+	DES|3DES|RC4|RC2|IDEA|AES256|CAMELLIA128|CAMELLIA256|NULL|IDEA) ;;
+	DES40)	cipher=DES ;;
 	SEED*)	cipher=SEED ;;
-	RC4128)	cipher=RC4 ;;
+	RC240)	cipher=RC2 ;;
+	RC440|RC4128)	cipher=RC4 ;;
 	*)
-		echo "Unknown cipher $cipher" >&2
+		warn "Unknown cipher $cipher in $hexid $1"
 		return
 		;;
 	esac
@@ -76,12 +105,14 @@ p() {
 	case $cipher in
 	AES|AES256|CAMELLIA128|CAMELLIA256|SEED)
 		blocksize=16 ;;
-	DES|3DES)
+	DES|3DES|IDEA)
 		blocksize=8 ;;
-	RC2|RC4|NULL)
+	RC2)
+		blocksize=8 ;;
+	RC4|NULL)
 		blocksize=1 ;;
 	*)
-		echo "Unknown cipher $cipher" >&2
+		warn "Unknown cipher $cipher in $hexid $1"
 		return
 		;;
 	esac
@@ -93,35 +124,46 @@ p() {
 	SHA256)	diglen=32 ;;
 	SHA384) diglen=48 ;;
 	*)
-		echo "Unknown dig in $1 (dig=$dig)" >&2
+		warn "Unknown dig in $hexid $1 (dig=$dig)"
 		return
 		;;
 	esac
 
 	us_export=0
+	if [[ $1 == *_EXPORT_* ]]; then
+		us_export=1
+		[ $exp_keysize -lt $keysize ] || \
+		warn "Export cipher, actual keysize may not be accurate: $hexid $1"
+	fi
 
 	# mode=STREAM
 	case $cipher in
-	AES|AES256|DES|3DES|CAMELLIA128|CAMELLIA256|SEED)
+	AES|AES256|DES|3DES|CAMELLIA128|CAMELLIA256|SEED|IDEA)
 		mode=CBC ;;
 	RC2|RC4|NULL)
 		mode=STREAM ;;
 	*)
-		echo "Unknown mode in $1 (cipher=$cipher)" >&2
+		warn "Unknown mode in $hexid $1 (cipher=$cipher)"
 		return
 		;;
 	esac
 
 cat <<EOF
-    {$num,KEX_$kex,SIG_$sig,ENC_$cipher,$blocksize,$keysize,$keysize,DIG_$dig,$diglen,$us_export, SSL_CIPHER_MODE_$mode},   /* $1 */
+    {$num,KEX_$kex,SIG_$sig,ENC_$cipher,$blocksize,$keysize,$exp_keysize,DIG_$dig,$diglen,$us_export, SSL_CIPHER_MODE_$mode},   /* $1 */
 EOF
 }
 
 # expects a line like:
 #  CipherSuite TLS_RSA_WITH_CAMELLIA_128_CBC_SHA         = { 0x00,0x41 };
 sed 's/CipherSuite//;s/,/ /g' | grep -v '^[ \t]*$' | tr -d '={};' | while read name n1 n2 rem; do
+	# for <number> <name>, like suites.txt
+	if [ -z "$n2$rem" ] && [[ $name =~ ^[0-9]+|0[Xx][0-9a-fA-F]$ ]]; then
+		p "$n1" 0 "$name"
+		continue
+	fi
+
 	if [ -n "$rem" ]; then
-		echo "Error! Invalid line: $name $n1 $n2 $rem" >&2
+		warn "Error! Invalid line: $name $n1 $n2 $rem"
 		continue
 	fi
 	p "$name" "$n1" "$n2"
