@@ -1,6 +1,56 @@
 #!/bin/bash
 # Generate nginx config and HTML for testing ciphers
 # Author: Peter Wu <lekensteyn@gmail.com>
+#
+# Tested with: nginx/1.4.2-4 openssl/1.0.1.e-3
+# (as packaged on Arch Linux)
+# For the keys, see "notes.txt" on how to generate them.
+#
+# This script will parse the output of `openssl ciphers`, write the HTML to
+# /srv/http/ciphertest/index.html (can be changed below, $root and $html) and
+# output the nginx server config to stdout. Note that this file is only
+# generated when the $root directory exists.
+#
+# When testing in browser, be sure to import the RSA, DSA and EC certificates.
+# Tested with Firefox 23.0.1 and Chromium 29.0.1547.65 (both are linked to NSS
+# 3.15.1), but those support too few ciphers so I used `openssl s_client` or
+# `curl` instead.
+#
+# Motivations for the nginx config:
+# - Details are put in the server block (instead of the http block) such that it
+#   can still be used with other sites in one nginx config.
+# - currently listens on localhost with an increasing port to avoid browsers to
+#   fall back to TLS w/o SNI support and then messing up the results. Other
+#   possible ways to solve this:
+#
+#    * Use different IPv6 addresses (or IPv4, but unless you are using
+#      localhost, you won't have access to a /26 subnet I guess)
+#    * Create different certificates for each host, not using a wildcard.
+#
+# If you start from scratch, you can try something like:
+#
+#     user http http;
+#     pid pid;
+#     error_log error_log info;
+#     events {
+#         worker_connections 768;
+#     }
+#     http {
+#         # because I have a long domain name
+#         server_names_hash_bucket_size 128;
+#         server_names_hash_max_size 1024;
+#         include ciphertest.conf;
+#     }
+#
+# Notes about this nginx.conf:
+# - ciphertest.conf is assumed to be in the same prefix $prefix
+# - certs/ containing private keys and public keys are also assumed present
+# - Start with: nginx -p $prefix -c nginx.conf
+#
+# A final note, this script is overly complicated because Wireshark initially
+# had issues with TLSv1.2 (while the SSLv3 Firefox client parses fine).  If you
+# are careful with matching ciphers to a DSA/RSA/EC certificate, you can also
+# use `openssl s_server` instead of nginx.
 
 #domain=ciphertest.lekensteyn.nl
 # ssl-enabled ip:port, may occur multiple times space-separated
@@ -34,8 +84,8 @@ htmlescape() {
     sed 's/&/&amp;/g;s/</\&lt/g;s/>/\&gt;/g'
 }
 
-#if [ ! -s "$html" ]; then
-if true; then # always generate file
+# always generate file when root is present
+if [ -d "$root" ]; then
 cat > "$html" <<EOF
 <!doctype html>
 <html>

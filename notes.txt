@@ -93,7 +93,9 @@ Missing support:
 - cipher suites 49195-49202 are taken from RFC 5289 - ECC with
   SHA256/384 and AES GCM
 
-
+# Generate RSA stuff
+openssl genrsa -out server.pem
+openssl req -new -x509 -key server.pem -out server.crt -days 3650 -subj "/CN=*.local.al.lekensteyn.nl"
 # Generate dsa params, privkey and signed pubkey
 openssl dsaparam 1024 -out dsaparam.pem
 openssl gendsa dsaparam.pem -out dsa.pem
