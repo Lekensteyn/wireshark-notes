@@ -9,7 +9,9 @@ s_client_client_random() {
     awk '
     # match Master-Key from SSL Session dump
     /Master-Key:/{key=$2}
-    {
+
+    # start matching bytes when requested
+    l > 0 {
         b=1;e=16;
         if(l==3)b=7;
         if(l==1)e=6;
@@ -18,20 +20,26 @@ s_client_client_random() {
 
         # at the end, save random value in map r
         if (l--==1)
-            r[s]=1
+            queued[s] = 1;
     }
 
     # Match block containing Crandom bytes (over three lines)
     / ClientHello|ServerHello$/{l=3;s=""}
 
-    END{
-        has_random = 0;
-        for (rnd in r) {
+    # whenever a key and random is available, print it. This allows the random
+    # to be known before the connection is finished.
+    key {
+        for (rnd in queued) {
             has_random = 1;
-            if (key)
-                print "CLIENT_RANDOM", rnd, key
-            else
-                print "# No master key for random", rnd
+            print "CLIENT_RANDOM", rnd, key
+            delete queued[rnd];
+        }
+        fflush();
+    }
+
+    END {
+        for (rnd in queued) {
+            print "# No master key for random", rnd
         }
         # should not be possible since the first thing we sent out is a
         # ClientHello, but just to be sure...
