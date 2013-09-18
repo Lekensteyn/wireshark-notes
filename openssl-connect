@@ -89,6 +89,7 @@ while read cipher; do
     # It is expected that the other side closes the connection
     printf "GET / HTTP/1.0\r\n\r\n" |
     openssl s_client -connect "$host:$port" -ign_eof -cipher "$cipher" \
+        -no_comp \
         -msg 2>&1 | s_client_client_random
 done
 
