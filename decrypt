@@ -1,0 +1,80 @@
+#!/bin/bash
+# Decrypt data using AES256 in CBC mode, optionally utilising IV and keys from
+# Wireshark's ssl.debug_file file
+
+#IV=
+#KEY=
+C=aes-256-cbc
+
+if [ $# -ge 2 -a $# -le 3 ]; then
+	debug_file="$1"
+	mode=$2
+	start_frame=$3
+
+	eval $(awk -vstart_frame=$start_frame '
+function try_name(name) {
+	if (frame >= start_frame && !found[name]) {
+		key_name = name;
+		found[name] = 1;
+	}
+}
+/^\| / {
+	if (key_name) {
+		for (i=2; i<18; i++)
+			key = key $i;
+	}
+}
+! /^\| / {
+	if (key_name) {
+		print key_name "=" key ";";
+		key = "";
+		key_name = "";
+	}
+}
+/^dissect_ssl enter frame #/ { sub("#", ""); frame = $4; }
+/^Client Write key/ { try_name("CKEY"); }
+/^Server Write key/ { try_name("SKEY"); }
+/^Client Write IV/ { try_name("CIV"); }
+/^Server Write IV/ { try_name("SIV"); }
+' "$debug_file")
+
+	[ -z "$IV" ] || echo "Warning: IV from debug won't be used" >&2
+	[ -z "$KEY" ] || echo "Warning: KEY from debug won't be used" >&2
+
+	case $mode in
+	[Cc]*) KEY=${KEY:-$CKEY}; IV=${IV:-$CIV} ;;
+	[Ss]*) KEY=${KEY:-$SKEY}; IV=${IV:-$SIV} ;;
+	*)
+		echo "Invalid mode, accepting only client or server" >&2
+		exit 1
+		;;
+	esac
+
+	if [ -z "$KEY" -o -z "$IV" ]; then
+		echo "Debug file is invalid, does not contain IV and KEY" >&2
+		exit 1
+	fi
+
+elif [ $# -lt 2 ]; then
+	if [ -z "$IV" -o -z "$KEY" ]; then
+		echo "Usage: echo hh hh.. | $0 debug-file mode [start frame]" >&2
+		echo "Usage: IV=... KEY=... $0 hh hh hh hh.." >&2
+		exit 1
+	fi
+fi
+
+if [ $# -gt 3 ]; then
+	echo "$*"
+else
+	awk '
+/^\| / { for (i=2; i<18; i++) print $i; }
+! /^\| / { print; }
+'
+fi |
+xxd -ps -r |
+openssl $C -nosalt -iv "${IV// /}" -K "${KEY// /}" -d |
+if [ -t 1 ]; then
+	xxd
+else
+	cat
+fi
