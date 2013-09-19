@@ -13,20 +13,6 @@ grep -E "$(cut -d' ' -f1 unsuppported-new.txt  openssl-supported-ciphers.txt | s
 
 # Command to look for relation between cipher and mode (stream vs cbc)
 grep epan/dissectors/packet-ssl-utils.c -e '^ *{.*,KEX' | column -s, -t | sort -k 4,4 -k 11,11
-Bugs:
-- DES is a block cipher, this should probably become block instead of stream:
-    {98     KEX_RSA  SIG_RSA   ENC_DES          8   64   64   DIG_SHA     20  1   SSL_CIPHER_MODE_STREAM}  
-- RC4 is a stream cipher, (block size = 1, not 16)
-    /*{138  KEX_PSK  SIG_RSA   ENC_RC4          16  128  128  DIG_SHA     20  0   SSL_CIPHER_MODE_CBC}     */
-- length for a signature was wrong (16 should be 20)
-    {99     KEX_DH   SIG_DSS   ENC_DES          8   64   64   DIG_SHA     16  1   SSL_CIPHER_MODE_CBC}     
-- IDEA is a block cipher ### VERIFIED
-#   {7      KEX_RSA  SIG_RSA   ENC_IDEA         8   128  128  DIG_SHA     20  0   SSL_CIPHER_MODE_STREAM}  
-- shouldn't a stream cipher operate on a block of 1? One of the two is wrong...
-    {6      KEX_RSA  SIG_RSA   ENC_RC2          8   128  40   DIG_SHA     20  1   SSL_CIPHER_MODE_STREAM}  
-    {97     KEX_RSA  SIG_RSA   ENC_RC2          1   128  56   DIG_MD5     16  1   SSL_CIPHER_MODE_STREAM}  
-- 27 is TLS_DH_anon_WITH_3DES_EDE_CBC_SHA, should become DIG_SHA,20
-     {27,KEX_DH,SIG_NONE,ENC_3DES,8,192,192,DIG_MD5,16,0, SSL_CIPHER_MODE_CBC},
 
 # pipe openssl
 stdbuf -oL openssl s_server -CAfile server.crt -cert server.crt -key server.pem -www -cipher ALL 2>&1 | awk '/ACCEPT/{print (++n) " " $0}!/ACCEPT/{print}{fflush()}'
