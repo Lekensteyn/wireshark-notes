@@ -13,8 +13,14 @@ s_client_client_random() {
     # start matching bytes when requested
     l > 0 {
         b=1;e=16;
-        if(l==3)b=7;
-        if(l==1)e=6;
+        if (version == 3) {
+            if(l==3)b=7;
+            if(l==1)e=6;
+        } else if (version == 2) {
+            if(l==4)e=-1; # skip first line
+            if(l==3)b=3;
+            if(l==1)e=2;
+        }
         for (i = b; i <= e; i++)
             s=s$i;
 
@@ -23,8 +29,10 @@ s_client_client_random() {
             queued[s] = 1;
     }
 
-    # Match block containing Crandom bytes (over three lines)
-    / ClientHello|ServerHello$/{l=3;s=""}
+    # Match TLS 1.2 Random bytes (over three lines)
+    / ClientHello|ServerHello$/{version=3;l=3;s=""}
+    # Match SSLv2 Challenge
+    / CLIENT-HELLO$/{version=2;l=4;s=""}
 
     # whenever a key and random is available, print it. This allows the random
     # to be known before the connection is finished.
