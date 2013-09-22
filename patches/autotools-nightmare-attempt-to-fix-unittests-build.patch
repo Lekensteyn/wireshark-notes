@@ -1,0 +1,850 @@
+WORK IN PROGRESS - If you have plenty of time, feel free to continue with
+developing this patch.
+diff --git a/Makefile.am b/Makefile.am
+index 31c8239..c7b4be2 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -577,7 +577,7 @@ dumpcap_CFLAGS = $(AM_CLEAN_CFLAGS) $(PIE_CFLAGS)
+ dumpcap_LDFLAGS = $(PIE_LDFLAGS)
+ 
+ # Common headers
+-AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/wiretap \
++AM_CPPFLAGS += -I$(top_srcdir) -I$(top_srcdir)/wiretap \
+ 	$(LIBGNUTLS_CFLAGS) $(LIBGCRYPT_CFLAGS) $(LIBSMI_CFLAGS) $(PY_CFLAGS) \
+ 	@LUA_INCLUDES@
+ 
+diff --git a/codecs/Makefile.am b/codecs/Makefile.am
+index cdf1df4..df54d1f 100644
+--- a/codecs/Makefile.am
++++ b/codecs/Makefile.am
+@@ -22,7 +22,7 @@
+ # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ noinst_LIBRARIES = libcodec.a
+diff --git a/configure.ac b/configure.ac
+index 90e7c5b..c82ef09 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -35,7 +35,7 @@ dnl AC_CANONICAL_BUILD
+ dnl AC_CANONICAL_HOST
+ AC_CANONICAL_TARGET
+ 
+-AM_INIT_AUTOMAKE([1.9 tar-ustar dist-bzip2 no-dist-gzip])
++AM_INIT_AUTOMAKE([1.9 tar-ustar dist-bzip2 no-dist-gzip subdir-objects])
+ 
+ # Make Wireshark's version available in config.h
+ AC_DEFINE(VERSION_MAJOR, version_major, [Wireshark's major version])
+@@ -1011,9 +1011,9 @@ if test "x$GCC" = "xyes" ; then
+ 	solaris*)
+ 		# the X11 headers don't automatically include prototype info
+ 		# and a lot don't include the return type
+-		CPPFLAGS="$CPPFLAGS -DFUNCPROTO=15"
+-		CFLAGS="$CFLAGS -Wno-return-type"
+-		CXXFLAGS="$CXXFLAGS -Wno-return-type"
++		AM_CPPFLAGS="$AM_CPPFLAGS -DFUNCPROTO=15"
++		AM_CFLAGS="$AM_CFLAGS -Wno-return-type"
++		AM_CXXFLAGS="$AM_CXXFLAGS -Wno-return-type"
+ 		AC_MSG_RESULT(GCC on Solaris - added -Wno-return-type -DFUNCPROTO=15)
+ 		;;
+ 	*)
+@@ -1167,7 +1167,7 @@ if test "x$ac_cv_enable_usr_local" = "xyes" ; then
+ 		# as various packages we use ("libpcap", "zlib", "adns")
+ 		# may have been installed under "/usr/local/include".
+ 		#
+-		CPPFLAGS="$CPPFLAGS -I/usr/local/include"
++		AM_CPPFLAGS="$AM_CPPFLAGS -I/usr/local/include"
+ 
+ 		#
+ 		# Arrange that we search for libraries in "/usr/local/lib".
+@@ -1353,7 +1353,7 @@ if test "x$enable_wireshark" = "xyes"; then
+ 		# XXX - greasy hack to make ui/gtk/recent.c
+ 		# compile.
+ 		#
+-		CPPFLAGS="-DQT_GUI_LIB"
++		AM_CPPFLAGS="$AM_CPPFLAGS -DQT_GUI_LIB"
+ 	fi
+ 
+ 	if test "x$with_gtk3" = "xyes"; then
+@@ -1470,14 +1470,14 @@ fi
+ if test "$have_gtk" = "yes" ; then
+ 	# If we have GTK then add flags for it.
+ 
+-	CPPFLAGS="-DGDK_PIXBUF_DISABLE_DEPRECATED $CPPFLAGS"
+-	CPPFLAGS="-DGDK_DISABLE_DEPRECATED $CPPFLAGS"
+-	CPPFLAGS="-DGTK_DISABLE_DEPRECATED $CPPFLAGS"
+-	CPPFLAGS="-DGTK_DISABLE_SINGLE_INCLUDES $CPPFLAGS"
++	AM_CPPFLAGS="$AM_CPPFLAGS -DGDK_PIXBUF_DISABLE_DEPRECATED"
++	AM_CPPFLAGS="$AM_CPPFLAGS -DGDK_DISABLE_DEPRECATED"
++	AM_CPPFLAGS="$AM_CPPFLAGS -DGTK_DISABLE_DEPRECATED"
++	AM_CPPFLAGS="$AM_CPPFLAGS -DGTK_DISABLE_SINGLE_INCLUDES"
+ 	if test ! \( $gtk_config_major_version -eq 2 -a $gtk_config_minor_version -lt 20 \) ; then
+ 		# Enable GSEAL when building with GTK > 2.20
+ 		# (Versions prior to 2.22 lacked some necessary accessors.)
+-		CPPFLAGS="-DGSEAL_ENABLE $CPPFLAGS"
++		AM_CPPFLAGS="$AM_CPPFLAGS -DGSEAL_ENABLE"
+ 	fi
+ fi
+ 
+@@ -1558,10 +1558,10 @@ AC_SUBST(MOC)
+ # Error out if a glib header other than a "top level" header
+ #  (glib.h, glib-object.h, gio.h) or certain other headers( e.g.,gmodule.h)
+ #  is used.
+-CPPFLAGS="-DG_DISABLE_SINGLE_INCLUDES $CPPFLAGS"
++AM_CPPFLAGS="$AM_CPPFLAGS -DG_DISABLE_SINGLE_INCLUDES"
+ 
+ # Error out on the usage of deprecated glib functions
+-CPPFLAGS="-DG_DISABLE_DEPRECATED $CPPFLAGS"
++AM_CPPFLAGS="$AM_CPPFLAGS -DG_DISABLE_DEPRECATED"
+ 
+ #
+ # Check whether GLib modules are supported, to determine whether we
+@@ -2596,7 +2596,7 @@ then
+   AC_DEFINE(HAVE_PLUGINS, 1, [Define if plugins are enabled])
+ fi
+ AC_SUBST(plugindir)
+-CPPFLAGS="$CPPFLAGS '-DPLUGIN_DIR=\"\$(plugindir)\"'"
++AM_CPPFLAGS="$AM_CPPFLAGS '-DPLUGIN_DIR=\"\$(plugindir)\"'"
+ 
+ #
+ # The plugin dissectors reside in ./plugins/PROTO/
+@@ -2604,6 +2604,10 @@ CPPFLAGS="$CPPFLAGS '-DPLUGIN_DIR=\"\$(plugindir)\"'"
+ PLUGIN_LIBS=""
+ AC_SUBST(PLUGIN_LIBS)
+ 
++AC_SUBST([AM_CPPFLAGS])
++AC_SUBST([AM_CFLAGS])
++AC_SUBST([AM_CXXFLAGS])
++
+ #
+ # Check if (emem) memory allocations must be 8-byte aligned.
+ # I haven't been able to write C code that reliably makes that determination
+diff --git a/echld/Makefile.am b/echld/Makefile.am
+index 12e91f7..a025c6c 100644
+--- a/echld/Makefile.am
++++ b/echld/Makefile.am
+@@ -37,13 +37,13 @@ libechld_la_LDFLAGS = -version-info 0:0:0 @LDFLAGS_SHAREDLIB@
+ 
+ 
+ 
+-AM_CFLAGS =-DWS_BUILD_DLL
++AM_CFLAGS += -DWS_BUILD_DLL
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+ AM_CFLAGS += -Werror
+ endif
+ 
+-AM_CPPFLAGS = -I$(srcdir)/.. -I$(srcdir)/../wiretap
++AM_CPPFLAGS += -I$(srcdir)/.. -I$(srcdir)/../wiretap
+ 
+ libechld_la_SOURCES = \
+ 	$(LIBECHLD_SRC)		\
+diff --git a/epan/Makefile.am b/epan/Makefile.am
+index 55bb3c7..96d09c0 100644
+--- a/epan/Makefile.am
++++ b/epan/Makefile.am
+@@ -60,7 +60,7 @@ libwireshark_la_LDFLAGS = -version-info 0:0:0 @LDFLAGS_SHAREDLIB@
+ 
+ include Makefile.common
+ 
+-AM_CPPFLAGS = -I$(srcdir)/.. -I$(srcdir)/$(LEMON) -I$(builddir)/wslua \
++AM_CPPFLAGS += -I$(srcdir)/.. -I$(LEMON) -I$(builddir)/wslua \
+ 	@LUA_INCLUDES@ $(LIBGNUTLS_CFLAGS) $(LIBGCRYPT_CFLAGS) \
+ 	$(LIBSMI_CFLAGS) $(LIBGEOIP_CFLAGS) $(PY_CFLAGS)
+ 
+@@ -155,7 +155,14 @@ libwireshark_la_DEPENDENCIES = \
+ 	${top_builddir}/wsutil/libwsutil.la \
+ 	${top_builddir}/wiretap/libwiretap.la
+ 
+-EXTRA_PROGRAMS = reassemble_test tvbtest
++subdirdeps = crypt/libairpdcap.la
++.PHONY: $(LEMON)/lemon$(EXEEXT) $(subdirdeps)
++
++# This allows `make libwireshark.la` from this subdir to work
++$(subdirdeps):
++	$(MAKE) -C $(@D) $(@F)
++
++EXTRA_PROGRAMS = exntest reassemble_test tvbtest
+ reassemble_test_LDADD = \
+ 	libwireshark.la \
+ 	$(GLIB_LIBS) \
+@@ -166,8 +173,12 @@ tvbtest_LDADD = \
+ 	$(GLIB_LIBS) \
+ 	-lz
+ 
+-exntest: exntest.o except.o
+-	$(LINK) $^ $(GLIB_LIBS)
++exntest_SOURCES = \
++	except.c \
++	exntest.c
++
++exntest_LDADD = \
++	$(GLIB_LIBS)
+ 
+ RUNLEX=$(top_srcdir)/tools/runlex.sh
+ 
+@@ -189,7 +200,8 @@ dtd_grammar.h: dtd_grammar.c
+ dtd_grammar.c : $(LEMON)/lemon$(EXEEXT) $(srcdir)/$(LEMON)/lempar.c $(srcdir)/dtd_grammar.lemon
+ 	$(AM_V_LEMON)$(LEMON)/lemon$(EXEEXT) t=$(srcdir)/$(LEMON)/lempar.c $(srcdir)/dtd_grammar.lemon
+ 
+-tvbtest.o exntest.o: exceptions.h
++$(LEMON)/lemon$(EXEEXT):
++	$(MAKE) -C $(LEMON) lemon$(EXEEXT)
+ 
+ sminmpec.c: enterprise-numbers ../tools/make-sminmpec.pl
+ 	$(PERL) $(srcdir)/../tools/make-sminmpec.pl $(srcdir)/enterprise-numbers sminmpec.c
+diff --git a/epan/crypt/Makefile.am b/epan/crypt/Makefile.am
+index 82bb91e..5cce652 100644
+--- a/epan/crypt/Makefile.am
++++ b/epan/crypt/Makefile.am
+@@ -24,10 +24,10 @@
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+-AM_CPPFLAGS = \
++AM_CPPFLAGS += \
+ 	-I$(top_srcdir)
+ 
+ noinst_LTLIBRARIES = libairpdcap.la
+diff --git a/epan/dfilter/Makefile.am b/epan/dfilter/Makefile.am
+index 438a5aa..e01fbff 100644
+--- a/epan/dfilter/Makefile.am
++++ b/epan/dfilter/Makefile.am
+@@ -47,7 +47,7 @@ MAINTAINERCLEANFILES = \
+ 	$(NODIST_GENERATED_FILES)	\
+ 	Makefile.in
+ 
+-AM_CPPFLAGS = -I$(srcdir)/../.. -I$(srcdir)/.. -I$(srcdir)/$(LEMON)
++AM_CPPFLAGS += -I$(srcdir)/../.. -I$(srcdir)/.. -I$(srcdir)/$(LEMON)
+ 
+ #Since code generated by lex may trigger gcc warnings, we are now generating two
+ #libraries.  A single library is generated with the lex code without the barrier
+diff --git a/epan/dissectors/Makefile.am b/epan/dissectors/Makefile.am
+index d9baf02..627b2c6 100644
+--- a/epan/dissectors/Makefile.am
++++ b/epan/dissectors/Makefile.am
+@@ -22,7 +22,7 @@
+ 
+ noinst_LTLIBRARIES = libdirtydissectors.la libfiledissectors.la libdissectors.la
+ 
+-AM_CPPFLAGS = -I$(srcdir)/../.. -I$(srcdir)/.. \
++AM_CPPFLAGS += -I$(srcdir)/../.. -I$(srcdir)/.. \
+ 	$(LIBGNUTLS_CFLAGS) $(LIBGCRYPT_CFLAGS)
+ 
+ include Makefile.common
+diff --git a/epan/ftypes/Makefile.am b/epan/ftypes/Makefile.am
+index 43e5060..34f6be3 100644
+--- a/epan/ftypes/Makefile.am
++++ b/epan/ftypes/Makefile.am
+@@ -21,7 +21,7 @@
+ # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ include Makefile.common
+@@ -36,7 +36,7 @@ CLEANFILES = \
+ MAINTAINERCLEANFILES = \
+ 	Makefile.in
+ 
+-AM_CPPFLAGS = -I$(srcdir)/../.. -I$(srcdir)/..
++AM_CPPFLAGS += -I$(srcdir)/../.. -I$(srcdir)/..
+ 
+ libftypes_la_SOURCES = $(NONGENERATED_C_FILES) $(NONGENERATED_HEADER_FILES)
+ 
+diff --git a/epan/wmem/Makefile.am b/epan/wmem/Makefile.am
+index de37727..0b1586d 100644
+--- a/epan/wmem/Makefile.am
++++ b/epan/wmem/Makefile.am
+@@ -22,12 +22,12 @@
+ # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ include Makefile.common
+ 
+-AM_CPPFLAGS = \
++AM_CPPFLAGS += \
+ 	-I$(top_srcdir) \
+ 	$(LIBWMEM_CFLAGS)
+ 
+diff --git a/epan/wslua/Makefile.am b/epan/wslua/Makefile.am
+index a037e2f..3345402 100644
+--- a/epan/wslua/Makefile.am
++++ b/epan/wslua/Makefile.am
+@@ -22,10 +22,10 @@
+ #
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+-AM_CPPFLAGS = -I$(top_srcdir) @LUA_INCLUDES@
++AM_CPPFLAGS += -I$(top_srcdir) @LUA_INCLUDES@
+ 
+ noinst_LTLIBRARIES = libwslua.la
+ 
+diff --git a/epan/wspython/Makefile.am b/epan/wspython/Makefile.am
+index 3a3ee2e..f6bbf7c 100644
+--- a/epan/wspython/Makefile.am
++++ b/epan/wspython/Makefile.am
+@@ -21,7 +21,7 @@
+ # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ include Makefile.common
+@@ -36,7 +36,7 @@ CLEANFILES = \
+ MAINTAINERCLEANFILES = \
+ 	Makefile.in
+ 
+-AM_CPPFLAGS = -I$(srcdir)/../.. -I$(srcdir)/..
++AM_CPPFLAGS += -I$(srcdir)/../.. -I$(srcdir)/..
+ 
+ libwspython_la_SOURCES = $(LIBWSPYTHON_SRC) $(LIBWSPYTHON_INCLUDES)
+ 
+diff --git a/plugins/asn1/Makefile.am b/plugins/asn1/Makefile.am
+index 873c6e4..15ec67a 100644
+--- a/plugins/asn1/Makefile.am
++++ b/plugins/asn1/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/docsis/Makefile.am b/plugins/docsis/Makefile.am
+index 308fe5a..a34dbf0 100644
+--- a/plugins/docsis/Makefile.am
++++ b/plugins/docsis/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/ethercat/Makefile.am b/plugins/ethercat/Makefile.am
+index 544ee4f..1b45f75 100644
+--- a/plugins/ethercat/Makefile.am
++++ b/plugins/ethercat/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/gryphon/Makefile.am b/plugins/gryphon/Makefile.am
+index df17146..47ae9f5 100644
+--- a/plugins/gryphon/Makefile.am
++++ b/plugins/gryphon/Makefile.am
+@@ -26,12 +26,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/irda/Makefile.am b/plugins/irda/Makefile.am
+index cfb4086..f8d8cb4 100644
+--- a/plugins/irda/Makefile.am
++++ b/plugins/irda/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/m2m/Makefile.am b/plugins/m2m/Makefile.am
+index d0e4545..dc64b6f 100644
+--- a/plugins/m2m/Makefile.am
++++ b/plugins/m2m/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir) -I../wimax
++AM_CPPFLAGS += -I$(top_srcdir) -I../wimax
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/mate/Makefile.am b/plugins/mate/Makefile.am
+index 3f0a59e..8c6cd14 100644
+--- a/plugins/mate/Makefile.am
++++ b/plugins/mate/Makefile.am
+@@ -24,7 +24,7 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+@@ -32,7 +32,7 @@ include Makefile.common
+ # XXX - how to make this apply only to clean files?
+ #
+ #if HAVE_WARNINGS_AS_ERRORS
+-#AM_CFLAGS = -Werror
++#AM_CFLAGS += -Werror
+ #endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/opcua/Makefile.am b/plugins/opcua/Makefile.am
+index 1b1727f..d16a839 100644
+--- a/plugins/opcua/Makefile.am
++++ b/plugins/opcua/Makefile.am
+@@ -25,12 +25,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/profinet/Makefile.am b/plugins/profinet/Makefile.am
+index 5636bef..266debd 100644
+--- a/plugins/profinet/Makefile.am
++++ b/plugins/profinet/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/stats_tree/Makefile.am b/plugins/stats_tree/Makefile.am
+index 0239142..9a770c4 100644
+--- a/plugins/stats_tree/Makefile.am
++++ b/plugins/stats_tree/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/tpg/Makefile.am b/plugins/tpg/Makefile.am
+index 1f3370a..3692ee0 100644
+--- a/plugins/tpg/Makefile.am
++++ b/plugins/tpg/Makefile.am
+@@ -23,10 +23,10 @@
+ #
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ plugindir = @plugindir@
+ 
+diff --git a/plugins/unistim/Makefile.am b/plugins/unistim/Makefile.am
+index a48b442..41e171d 100644
+--- a/plugins/unistim/Makefile.am
++++ b/plugins/unistim/Makefile.am
+@@ -25,12 +25,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/wimax/Makefile.am b/plugins/wimax/Makefile.am
+index d677789..4797f4a 100644
+--- a/plugins/wimax/Makefile.am
++++ b/plugins/wimax/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/wimaxasncp/Makefile.am b/plugins/wimaxasncp/Makefile.am
+index 259d10e..1e14c02 100644
+--- a/plugins/wimaxasncp/Makefile.am
++++ b/plugins/wimaxasncp/Makefile.am
+@@ -24,7 +24,7 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+@@ -32,7 +32,7 @@ include Makefile.common
+ # XXX - how to make this apply only to clean files?
+ #
+ #if HAVE_WARNINGS_AS_ERRORS
+-#AM_CFLAGS = -Werror
++#AM_CFLAGS += -Werror
+ #endif
+ 
+ plugindir = @plugindir@
+diff --git a/plugins/wimaxmacphy/Makefile.am b/plugins/wimaxmacphy/Makefile.am
+index 81a9b6e..1472d1c 100644
+--- a/plugins/wimaxmacphy/Makefile.am
++++ b/plugins/wimaxmacphy/Makefile.am
+@@ -24,12 +24,12 @@
+ 
+ include $(top_srcdir)/Makefile.am.inc
+ 
+-AM_CPPFLAGS = -I$(top_srcdir)
++AM_CPPFLAGS += -I$(top_srcdir)
+ 
+ include Makefile.common
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ plugindir = @plugindir@
+diff --git a/test/README.test b/test/README.test
+index 28ea59c..f3b2587 100644
+--- a/test/README.test
++++ b/test/README.test
+@@ -47,8 +47,29 @@ What you'll need (to do):
+ A Test Ride
+ -----------
+ 
+-Start test.sh which should provide a basic menu. Just press Enter to start 
+-all tests.
++The default configuration might not be suitable for your set-up. Most settings
++can be adjusted by setting an environment variable matching or by editing the
++setting in config.sh.
++
++For instance, the first network interface might not be used for traffic (like an
++unconnected Ethernet port). In that case, you might want to set the environment
++variable TRAFFIC_CAPTURE_IFACE to pick another interface. Use `dumpcap -D` to
++get a list of devices.
++
++On Windows, it is assumed that the user is able to perform captures. On
++non-Windows platforms, the opposite is assumed. If your dumpcap executable
++allows you to perform captures (for example, when it has appropriate
++capabilities), then you can override the default with:
++
++    SKIP_CAPTURE=0
++
++If you do not want to test the binaries in the build directory, you can override
++it with:
++
++	WS_BIN_PATH=/usr/bin
++
++When your configuration is sane, you can start test.sh which should provide a
++basic menu. Just press Enter to start all tests.
+ 
+ It should start all the available tests. Each test will throw out a line 
+ which should end with a green "Ok". If one of the tests fail, the script
+diff --git a/test/config.sh b/test/config.sh
+index 1b95be6..aa1ab66 100755
+--- a/test/config.sh
++++ b/test/config.sh
+@@ -40,6 +40,9 @@ if [ $? -eq 0 ] ; then
+ 	ENDIANNESS="big"
+ fi
+ 
++# Absolute path to the source tree (needed for unit tests)
++SOURCE_DIR="$(cd "$(dirname "$0")" && cd .. && pwd)"
++
+ # Absolute path to this directory
+ TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+ 
+diff --git a/test/suite-unittests.sh b/test/suite-unittests.sh
+index 8629ccb..51dadfd 100755
+--- a/test/suite-unittests.sh
++++ b/test/suite-unittests.sh
+@@ -64,29 +64,48 @@ unittests_step_test() {
+ 
+ 
+ unittests_step_exntest() {
+-	DUT=../epan/exntest
++	DUT="$BUILD_DIR/epan/exntest"
+ 	ARGS=
+ 	unittests_step_test
+ }
+ 
+ unittests_step_reassemble_test() {
+-	DUT=../epan/reassemble_test
++	DUT="$BUILD_DIR/epan/reassemble_test"
+ 	ARGS=
+ 	unittests_step_test
+ }
+ 
+ unittests_step_tvbtest() {
+-	DUT=../epan/tvbtest
++	DUT="$BUILD_DIR/epan/tvbtest"
+ 	ARGS=
+ 	unittests_step_test
+ }
+ 
+ unittests_step_wmem_test() {
+-	DUT=../epan/wmem/wmem_test
++	DUT="$BUILD_DIR/epan/wmem/wmem_test"
+ 	ARGS=--verbose
+ 	unittests_step_test
+ }
+ 
++unittests_configure() {
++	# Only applicable to OSes using autotools
++	if [[ $WS_SYSTEM == Windows ]]; then
++		# XXX - No idea what 'configure' program is used for Windows...
++		BUILD_DIR="$SOURCE_DIR"
++		return
++	fi
++
++	# breaks because declare_wslua.h does not exist and is not a dependency
++	#CONFIGURE_OPTS='--without-lua'
++	BUILD_DIR="$TEST_OUTDIR/build"
++
++	if [ ! -f "$BUILD_DIR/epan/Makefile" ]; then
++		[ -d "$BUILD_DIR" ] || mkdir "$BUILD_DIR"
++		if ! (cd "$BUILD_DIR" && "$SOURCE_DIR/configure" $CONFIGURE_OPTS); then
++			test_step_failed "Failed to configure and generate Makefile"
++		fi
++	fi
++}
+ unittests_cleanup_step() {
+ 	rm -f ./testout.txt
+ }
+@@ -94,6 +113,7 @@ unittests_cleanup_step() {
+ unittests_suite() {
+ 	test_step_set_pre unittests_cleanup_step
+ 	test_step_set_post unittests_cleanup_step
++	test_step_add "Ensure Makefile exists" unittests_configure
+ 	test_step_add "exntest" unittests_step_exntest
+ 	test_step_add "reassemble_test" unittests_step_reassemble_test
+ 	test_step_add "tvbtest" unittests_step_tvbtest
+diff --git a/test/test.sh b/test/test.sh
+index 47e2465..e2d5292 100755
+--- a/test/test.sh
++++ b/test/test.sh
+@@ -85,7 +85,7 @@ fi
+ test_cleanup() {
+ 	if [ $TEST_OUTDIR_CLEAN = 1 ]; then
+ 		# display contents of test outputs
+-		grep -r . .
++		grep -r . --exclude-dir=build .
+ 		rm -rf "$TEST_OUTDIR"
+ 	else
+ 		echo "Test results are available in $TEST_OUTDIR"
+diff --git a/tools/lemon/Makefile.am b/tools/lemon/Makefile.am
+index fe93144..ce8a4f6 100644
+--- a/tools/lemon/Makefile.am
++++ b/tools/lemon/Makefile.am
+@@ -26,7 +26,7 @@
+ # also need to link against libftypes.
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+-AM_CFLAGS = -Werror
++AM_CFLAGS += -Werror
+ endif
+ 
+ noinst_PROGRAMS = lemon
+@@ -37,8 +37,8 @@ CLEANFILES = \
+ MAINTAINERCLEANFILES = \
+ 	Makefile.in
+ 
+-lemon$(EXEEXT): lemon.c
+-	$(CC_FOR_BUILD) -I$(top_builddir) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) -o $@ $?
++lemon_SOURCES = \
++	lemon.c
+ 
+ EXTRA_DIST = \
+ 	cppmagic.h		\
+diff --git a/ui/Makefile.am b/ui/Makefile.am
+index a1f14cd..708bb37 100644
+--- a/ui/Makefile.am
++++ b/ui/Makefile.am
+@@ -62,7 +62,7 @@ libui_dirty_a_SOURCES = \
+ libui_dirty_a_DEPENDENCIES =
+ 
+ # Common headers
+-AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/wiretap $(LIBGCRYPT_CFLAGS) $(LIBGNUTLS_CFLAGS) $(PORTAUDIO_INCLUDES)
++AM_CPPFLAGS += -I$(top_srcdir) -I$(top_srcdir)/wiretap $(LIBGCRYPT_CFLAGS) $(LIBGNUTLS_CFLAGS) $(PORTAUDIO_INCLUDES)
+ 
+ 
+ doxygen:
+diff --git a/ui/cli/Makefile.am b/ui/cli/Makefile.am
+index 4b5231d..b3c59c8 100644
+--- a/ui/cli/Makefile.am
++++ b/ui/cli/Makefile.am
+@@ -75,7 +75,7 @@ libcliui_a_CFLAGS = $(AM_CLEAN_CFLAGS)
+ libcliui_a_DEPENDENCIES =
+ 
+ # Common headers
+-AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/wiretap $(LIBGCRYPT_CFLAGS) $(LIBGNUTLS_CFLAGS) $(PORTAUDIO_INCLUDES)
++AM_CPPFLAGS += -I$(top_srcdir) -I$(top_srcdir)/wiretap $(LIBGCRYPT_CFLAGS) $(LIBGNUTLS_CFLAGS) $(PORTAUDIO_INCLUDES)
+ 
+ 
+ doxygen:
+diff --git a/ui/gtk/Makefile.am b/ui/gtk/Makefile.am
+index 1138244..0f4fe6c 100644
+--- a/ui/gtk/Makefile.am
++++ b/ui/gtk/Makefile.am
+@@ -78,7 +78,7 @@ libgtkui_a_CFLAGS = $(AM_CLEAN_CFLAGS)
+ libgtkui_a_DEPENDENCIES =
+ 
+ # Common headers
+-AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/wiretap $(PORTAUDIO_INCLUDES)
++AM_CPPFLAGS += -I$(top_srcdir) -I$(top_srcdir)/wiretap $(PORTAUDIO_INCLUDES)
+ 
+ 
+ doxygen:
+diff --git a/ui/qt/Makefile.am b/ui/qt/Makefile.am
+index 05218b3..3ec9138 100644
+--- a/ui/qt/Makefile.am
++++ b/ui/qt/Makefile.am
+@@ -62,7 +62,7 @@ libqtui_a_CFLAGS = $(AM_CLEAN_CFLAGS)
+ libqtui_a_DEPENDENCIES =
+ 
+ # Common headers
+-AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/wiretap $(LIBGCRYPT_CFLAGS) $(LIBGNUTLS_CFLAGS) $(PORTAUDIO_INCLUDES) $(PIE_CFLAGS)
++AM_CPPFLAGS += -I$(top_srcdir) -I$(top_srcdir)/wiretap $(LIBGCRYPT_CFLAGS) $(LIBGNUTLS_CFLAGS) $(PORTAUDIO_INCLUDES) $(PIE_CFLAGS)
+ 
+ AM_V_MOC = $(am__v_MOC_@AM_V@)
+ am__v_MOC_ = $(am__v_MOC_@AM_DEFAULT_V@)
+diff --git a/wiretap/Makefile.am b/wiretap/Makefile.am
+index 8f86c01..35f2190 100644
+--- a/wiretap/Makefile.am
++++ b/wiretap/Makefile.am
+@@ -38,7 +38,7 @@ if HAVE_WARNINGS_AS_ERRORS
+ AM_NON_GENERATED_CFLAGS += -Werror
+ endif
+ 
+-AM_CPPFLAGS = -I$(srcdir)/..
++AM_CPPFLAGS += -I$(srcdir)/..
+ 
+ CLEANFILES = \
+ 	libwiretap.a		\
+diff --git a/wsutil/Makefile.am b/wsutil/Makefile.am
+index 6ccf8f2..ebc11c5 100644
+--- a/wsutil/Makefile.am
++++ b/wsutil/Makefile.am
+@@ -54,7 +54,7 @@ include ../Makefile.am.inc
+ 
+ include Makefile.common
+ 
+-AM_CFLAGS =-DWS_BUILD_DLL
++AM_CFLAGS += -DWS_BUILD_DLL
+ 
+ if HAVE_WARNINGS_AS_ERRORS
+ AM_CFLAGS += -Werror
+@@ -64,7 +64,7 @@ lib_LTLIBRARIES = libwsutil.la
+ # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
+ libwsutil_la_LDFLAGS = -version-info 0:0:0 @LDFLAGS_SHAREDLIB@
+ 
+-AM_CPPFLAGS = -I$(srcdir)/..
++AM_CPPFLAGS += -I$(srcdir)/..
+ 	$(LIBGCRYPT_CFLAGS)
+ 
+ libwsutil_la_SOURCES =		\
