@@ -1,0 +1,86 @@
+From 63ff32752e9a15e7f0d03b7f86ac52bd4ee15fff Mon Sep 17 00:00:00 2001
+From: Peter Wu <lekensteyn@gmail.com>
+Date: Thu, 26 Sep 2013 23:05:37 +0200
+Subject: [PATCH] Add support for 128-bit keys in RC2
+
+This patch adds support for decrypting (and encrypting) using 128-bit
+keys using the RC2 algorithm.
+
+Signed-off-by: Peter Wu <lekensteyn@gmail.com>
+---
+Hi,
+
+First of all a disclaimer, I am not a cryptographer but a computer science
+student. The purpose of this patch is to allow Wireshark to decrypt TLS packets
+using the TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5 cipher suite (all cipher suites are
+supported, except RC2[1]).
+
+doc/gcrypt.texi was deliberately not updated as the help text might need other
+notes like "this algorithm should not be used as it is insecure" besides "Both
+40-bit and 128-bit keys are supported". I leave updating this document up to
+you.
+
+Regards,
+Peter
+
+ [1]: https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=9144
+---
+ cipher/cipher.c  |  2 ++
+ cipher/rfc2268.c | 13 +++++++++++++
+ src/cipher.h     |  1 +
+ 3 files changed, 16 insertions(+)
+
+diff --git a/cipher/cipher.c b/cipher/cipher.c
+index 6ddd58b..3b271d6 100644
+--- a/cipher/cipher.c
++++ b/cipher/cipher.c
+@@ -87,6 +87,8 @@ static struct cipher_table_entry
+ #if USE_RFC2268
+     { &_gcry_cipher_spec_rfc2268_40,
+       &dummy_extra_spec,                  GCRY_CIPHER_RFC2268_40 },
++    { &_gcry_cipher_spec_rfc2268_128,
++      &dummy_extra_spec,                  GCRY_CIPHER_RFC2268_128 },
+ #endif
+ #if USE_SEED
+     { &_gcry_cipher_spec_seed,
+diff --git a/cipher/rfc2268.c b/cipher/rfc2268.c
+index 130be9b..da0b9f4 100644
+--- a/cipher/rfc2268.c
++++ b/cipher/rfc2268.c
+@@ -351,8 +351,21 @@ static gcry_cipher_oid_spec_t oids_rfc2268_40[] =
+     { NULL }
+   };
+ 
++static gcry_cipher_oid_spec_t oids_rfc2268_128[] =
++  {
++    /* pbeWithSHAAnd128BitRC2_CBC */
++    { "1.2.840.113549.1.12.1.5", GCRY_CIPHER_MODE_CBC },
++    { NULL }
++  };
++
+ gcry_cipher_spec_t _gcry_cipher_spec_rfc2268_40 = {
+   "RFC2268_40", NULL, oids_rfc2268_40,
+   RFC2268_BLOCKSIZE, 40, sizeof(RFC2268_context),
+   do_setkey, encrypt_block, decrypt_block
+ };
++
++gcry_cipher_spec_t _gcry_cipher_spec_rfc2268_128 = {
++  "RFC2268_128", NULL, oids_rfc2268_128,
++  RFC2268_BLOCKSIZE, 128, sizeof(RFC2268_context),
++  do_setkey, encrypt_block, decrypt_block
++};
+diff --git a/src/cipher.h b/src/cipher.h
+index 7791083..516154f 100644
+--- a/src/cipher.h
++++ b/src/cipher.h
+@@ -193,6 +193,7 @@ extern gcry_cipher_spec_t _gcry_cipher_spec_serpent128;
+ extern gcry_cipher_spec_t _gcry_cipher_spec_serpent192;
+ extern gcry_cipher_spec_t _gcry_cipher_spec_serpent256;
+ extern gcry_cipher_spec_t _gcry_cipher_spec_rfc2268_40;
++extern gcry_cipher_spec_t _gcry_cipher_spec_rfc2268_128;
+ extern gcry_cipher_spec_t _gcry_cipher_spec_seed;
+ extern gcry_cipher_spec_t _gcry_cipher_spec_camellia128;
+ extern gcry_cipher_spec_t _gcry_cipher_spec_camellia192;
+-- 
+1.8.4
+
