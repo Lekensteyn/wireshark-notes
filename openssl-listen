@@ -10,6 +10,7 @@ ecd_prv=secp384r1-dsa.pem
 ecd_pub=secp384r1-dsa.crt
 ecc_prv=secp384r1-rsa.pem
 ecc_pub=secp384r1-rsa.crt
+PSK=12345678
 
 pkdir=$1
 portbase=${2:-4430}
@@ -28,8 +29,6 @@ if ! mkdir -p "$pkdir"; then
     echo "Could not create directory $pkdir" >&2
     exit 1
 fi
-
-set -u
 
 pids=()
 
@@ -72,7 +71,7 @@ gen_pk() {
 }
 
 start_server() {
-    local keyfile crtfile port auth ca_key= ca_crt=
+    local keyfile crtfile port auth ca_key= ca_crt= opts=()
     auth=$1
 
     case $auth in
@@ -80,6 +79,7 @@ start_server() {
         crtfile=$rsa_pub
         keyfile=$rsa_prv
         port=$portbase
+        opts+=(-psk "$PSK")
         ;;
     ECDSA)
         crtfile=$ecd_pub
@@ -111,6 +111,7 @@ start_server() {
     fi
 
     openssl s_server -accept $port \
+        "${opts[@]}" \
         -cert "$pkdir$crtfile" -key "$pkdir$keyfile" -www &
     pids+=($!)
 }
