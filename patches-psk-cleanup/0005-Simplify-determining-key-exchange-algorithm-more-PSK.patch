@@ -1,0 +1,287 @@
+From e959b19462c28a74092b445f17fd20f7507c9cca Mon Sep 17 00:00:00 2001
+From: Peter Wu <lekensteyn@gmail.com>
+Date: Wed, 2 Oct 2013 00:11:45 +0200
+Subject: [PATCH 5/6] Simplify determining key exchange algorithm, more PSK
+ support
+
+The list of key exchange algorithms in ssl_get_keyex_alg is a
+list of magic numbers that is also available in the cipher_suites
+variable (compiled when GnuTLS support is enabled). Use this fact
+to avoid having the same numbers in two places.
+
+Note that this places a dependency on GnuTLS. Without GnuTLS,
+ssl_find_cipher always returns -1. This is not a big issue as
+ssl_get_keyex_alg() is only used for decoding the ClientKeyExchange and
+ServerKeyExchange messages. Support for these has only been added very
+recently and users of this feature will very likely also have GnuTLS
+support enabled to allow decryption of TLS packets.
+
+Comparing the cipher_suites list to the magic numbers list shows
+that 32 new Camellia cipher suites have been added. Some cipher suites
+are gone: all 8 ARIA cipher suites (not implemented by major TLS
+libraries), 6 AES-CCM suites for PSK and the cipher suites 0xFE,0xFF;
+0xFE,0xFF; 0xFF,0xE0; 0xFF,0xE1 (marked as reserved by IANA).
+
+After this change, PSK client params are decoded for more PSK cipher
+suites by not relying on magic numbers, but checking the keyex type.
+---
+ epan/dissectors/packet-ssl-utils.c | 222 +------------------------------------
+ epan/dissectors/packet-ssl.c       |   6 +-
+ 2 files changed, 5 insertions(+), 223 deletions(-)
+
+diff --git a/epan/dissectors/packet-ssl-utils.c b/epan/dissectors/packet-ssl-utils.c
+index 863e431..d38b3bd 100644
+--- a/epan/dissectors/packet-ssl-utils.c
++++ b/epan/dissectors/packet-ssl-utils.c
+@@ -1093,224 +1093,10 @@ struct _SslDecompress {
+    0 indicates unknown */
+ gint ssl_get_keyex_alg(gint cipher)
+ {
+-    switch(cipher) {
+-    case 0x0001:
+-    case 0x0002:
+-    case 0x0003:
+-    case 0x0004:
+-    case 0x0005:
+-    case 0x0006:
+-    case 0x0007:
+-    case 0x0008:
+-    case 0x0009:
+-    case 0x000a:
+-    case 0x002f:
+-    case 0x0035:
+-    case 0x003b:
+-    case 0x003c:
+-    case 0x003d:
+-    case 0x0041:
+-    case 0x0060:
+-    case 0x0061:
+-    case 0x0062:
+-    case 0x0064:
+-    case 0x0084:
+-    case 0x0096:
+-    case 0x009c:
+-    case 0x009d:
+-    case 0x00ba:
+-    case 0x00c0:
+-    case 0xfefe:
+-    case 0xfeff:
+-    case 0xffe0:
+-    case 0xffe1:
+-        return KEX_RSA;
+-    case 0x000b:
+-    case 0x000c:
+-    case 0x000d:
+-    case 0x000e:
+-    case 0x000f:
+-    case 0x0010:
+-    case 0x0011:
+-    case 0x0012:
+-    case 0x0013:
+-    case 0x0014:
+-    case 0x0015:
+-    case 0x0016:
+-    case 0x0017:
+-    case 0x0018:
+-    case 0x0019:
+-    case 0x001a:
+-    case 0x001b:
+-    case 0x002d:
+-    case 0x0030:
+-    case 0x0031:
+-    case 0x0032:
+-    case 0x0033:
+-    case 0x0034:
+-    case 0x0036:
+-    case 0x0037:
+-    case 0x0038:
+-    case 0x0039:
+-    case 0x003a:
+-    case 0x003e:
+-    case 0x003f:
+-    case 0x0040:
+-    case 0x0042:
+-    case 0x0043:
+-    case 0x0044:
+-    case 0x0045:
+-    case 0x0046:
+-    case 0x0063:
+-    case 0x0065:
+-    case 0x0066:
+-    case 0x0067:
+-    case 0x0068:
+-    case 0x0069:
+-    case 0x006a:
+-    case 0x006b:
+-    case 0x006c:
+-    case 0x006d:
+-    case 0x0085:
+-    case 0x0086:
+-    case 0x0087:
+-    case 0x0088:
+-    case 0x0089:
+-    case 0x008e:
+-    case 0x008f:
+-    case 0x0090:
+-    case 0x0091:
+-    case 0x0097:
+-    case 0x0098:
+-    case 0x0099:
+-    case 0x009a:
+-    case 0x009b:
+-    case 0x009e:
+-    case 0x009f:
+-    case 0x00a0:
+-    case 0x00a1:
+-    case 0x00a2:
+-    case 0x00a3:
+-    case 0x00a4:
+-    case 0x00a5:
+-    case 0x00a6:
+-    case 0x00a7:
+-    case 0x00aa:
+-    case 0x00ab:
+-    case 0x00b2:
+-    case 0x00b3:
+-    case 0x00b4:
+-    case 0x00b5:
+-    case 0x00bb:
+-    case 0x00bc:
+-    case 0x00bd:
+-    case 0x00be:
+-    case 0x00bf:
+-    case 0x00c1:
+-    case 0x00c2:
+-    case 0x00c3:
+-    case 0x00c4:
+-    case 0x00c5:
+-        return KEX_DH;
+-    case 0xc001:
+-    case 0xc002:
+-    case 0xc003:
+-    case 0xc004:
+-    case 0xc005:
+-    case 0xc006:
+-    case 0xc007:
+-    case 0xc008:
+-    case 0xc009:
+-    case 0xc00a:
+-    case 0xc00b:
+-    case 0xc00c:
+-    case 0xc00d:
+-    case 0xc00e:
+-    case 0xc00f:
+-    case 0xc010:
+-    case 0xc011:
+-    case 0xc012:
+-    case 0xc013:
+-    case 0xc014:
+-    case 0xc015:
+-    case 0xc016:
+-    case 0xc017:
+-    case 0xc018:
+-    case 0xc019:
+-    case 0xc023:
+-    case 0xc024:
+-    case 0xc025:
+-    case 0xc026:
+-    case 0xc027:
+-    case 0xc028:
+-    case 0xc029:
+-    case 0xc02a:
+-    case 0xc02b:
+-    case 0xc02c:
+-    case 0xc02d:
+-    case 0xc02e:
+-    case 0xc02f:
+-    case 0xc030:
+-    case 0xc031:
+-    case 0xc032:
+-    case 0xc033:
+-    case 0xc034:
+-    case 0xc035:
+-    case 0xc036:
+-    case 0xc037:
+-    case 0xc038:
+-    case 0xc039:
+-    case 0xc03a:
+-    case 0xc03b:
+-        return KEX_ECDH;
+-    case 0x002C:
+-    case 0x008A:
+-    case 0x008B:
+-    case 0x008C:
+-    case 0x008D:
+-    case 0x00A8:
+-    case 0x00A9:
+-    case 0x00AE:
+-    case 0x00AF:
+-    case 0x00B0:
+-    case 0x00B1:
+-    case 0xC064:
+-    case 0xC065:
+-    case 0xC06A:
+-    case 0xC06B:
+-    case 0xC08E:
+-    case 0xC08F:
+-    case 0xC094:
+-    case 0xC095:
+-    case 0xC0A4:
+-    case 0xC0A5:
+-    case 0xC0A8:
+-    case 0xC0A9:
+-    case 0xC0AA:
+-    case 0xC0AB:
+-        return KEX_PSK;
+-    case 0x002E:
+-    case 0x0092:
+-    case 0x0093:
+-    case 0x0094:
+-    case 0x0095:
+-    case 0x00AC:
+-    case 0x00AD:
+-    case 0x00B6:
+-    case 0x00B7:
+-    case 0x00B8:
+-    case 0x00B9:
+-    case 0xC068:
+-    case 0xC069:
+-    case 0xC06E:
+-    case 0xC06F:
+-    case 0xC092:
+-    case 0xC093:
+-    case 0xC098:
+-    case 0xC099:
+-        return KEX_RSA_PSK;
+-    default:
+-        break;
++    SslCipherSuite cs;
++    if (ssl_find_cipher(cipher, &cs) == 0) {
++        /* NOTE: this requires GnuTLS, otherwise stuff is not compiled-in. */
++        return cs.kex;
+     }
+ 
+     return 0;
+diff --git a/epan/dissectors/packet-ssl.c b/epan/dissectors/packet-ssl.c
+index 31dbada..bdd6727 100644
+--- a/epan/dissectors/packet-ssl.c
++++ b/epan/dissectors/packet-ssl.c
+@@ -2129,14 +2129,10 @@ dissect_ssl3_handshake(tvbuff_t *tvb, packet_info *pinfo,
+                 {
+                     /* PAOLO: here we can have all the data to build session key*/
+ 
+-                    gint cipher_num;
+-
+                     if (!ssl)
+                         break;
+ 
+-                    cipher_num = ssl->cipher;
+-
+-                    if (cipher_num == 0x8a || cipher_num == 0x8b || cipher_num == 0x8c || cipher_num == 0x8d)
++                    if (ssl->cipher_suite.kex == KEX_PSK)
+                     {
+                         /* calculate pre master secret*/
+                         StringInfo pre_master_secret;
+-- 
+1.8.4
+
