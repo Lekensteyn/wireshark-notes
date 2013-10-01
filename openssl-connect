@@ -5,6 +5,7 @@
 host=${1:-localhost}
 portbase=${2:-4430}
 PSK=12345678
+PSK=0102030405060708091011121314151617181920
 
 s_client_client_random() {
     awk '

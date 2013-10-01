@@ -11,6 +11,7 @@ ecd_pub=secp384r1-dsa.crt
 ecc_prv=secp384r1-rsa.pem
 ecc_pub=secp384r1-rsa.crt
 PSK=12345678
+PSK=0102030405060708091011121314151617181920
 
 pkdir=$1
 portbase=${2:-4430}

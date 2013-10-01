@@ -1,5 +1,15 @@
 /tmp/wireshark/configure --prefix=/tmp/wsroot --with-ssl --with-gtk2 --without-gtk3
 
+# libgcrypt RC2 fixing
+# Fix compile issue (missing fig2dev in doc, Makefile.in in tests is not
+# generated (Makefile/autotools of the repo too old?))
+sed '/SUBDIRS/s/ doc tests//' -i Makefile.am && ./autogen.sh
+mkdir build && cd build
+../configure --disable-static --disable-padlock-support --prefix=/tmp/libgcrypt/prefix
+make install
+# for libgcrypt-config test in wireshark ./configure
+PATH=/tmp/libgcrypt/prefix/bin:$PATH
+
 # find which suites are not supported yet (unsupported.txt)
 awk -vsrc=/tmp/wireshark/epan/dissectors/packet-ssl-utils.c -F'[ {,]+' 'BEGIN{while(getline <src)if(/^ *\{.*,KEX_/)a[$2]=1}{if(!a[$1])print}' suites.txt
 # find which ciphers openssl supports
@@ -86,6 +96,12 @@ http://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-paramete
 - PSK
 - ARIA
 - mode CCM
+
+libgcrypt RC2 (40-bit keys) implementation is named "RFC2268_40". This does not
+seem to work with TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5 though. I think that the
+unimplemented RFC2268_128 algo should be used. As mentioned in RFC 2246 (TLS
+1.0), section 6.3.1. Export key generation example, this RC2 cipher suite has a
+final_client_write_key length of 128 bits.
 
 # Generate RSA stuff
 openssl genrsa -out server.pem

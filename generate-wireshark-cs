@@ -17,7 +17,7 @@ warn() {
 }
 
 p() {
-	local tmp kex sig keysize exp_keysize=0 dig diglen mode us_export blocksize hexid
+	local tmp kex keysize exp_keysize=0 dig diglen mode us_export blocksize hexid
 	[ $# -gt 0 ] || return
 	num=$(($2*0x100 + $3))
 	hexid=000$(echo "obase=16;$num" | bc)
@@ -32,27 +32,13 @@ p() {
 	tmp=${tmp%_EXPORT}
 	tmp=${tmp#TLS_}
 	case $tmp in
+	PSK)		kex=PSK ;;
+	RSA_PSK)	kex=RSA_PSK ;;
 	RSA)		kex=RSA ;;
 	DH_*|DHE_*)	kex=DH ;;
-	ECDH_*|ECDHE_*)	kex=DH ;;
+	ECDH_*|ECDHE_*)	kex=ECDH ;;
 	*)
 		warn "Unknown kex in $hexid $1 (tmp=$tmp)"
-		return
-		;;
-	esac
-
-	tmp=${1%%_WITH_*}
-	tmp=${tmp%_EXPORT}
-	tmp=${tmp#TLS_}
-	tmp=${tmp#EC}
-	tmp=${tmp#DH_}
-	tmp=${tmp#DHE_}
-	case $tmp in
-	RSA|DSS)	sig=$tmp ;;
-	ECDSA)		sig=DSS ;;
-	anon)		sig=NONE ;;
-	*)
-		warn "Unknown sig in $hexid $1 (tmp=$tmp)"
 		return
 		;;
 	esac
@@ -151,7 +137,7 @@ p() {
 	esac
 
 cat <<EOF
-    {$num,KEX_$kex,SIG_$sig,ENC_$cipher,$blocksize,$keysize,$exp_keysize,DIG_$dig, SSL_CIPHER_MODE_$mode},   /* $1 */
+    {$num,KEX_$kex,ENC_$cipher,$blocksize,$keysize,$exp_keysize,DIG_$dig, SSL_CIPHER_MODE_$mode},   /* $1 */
 EOF
 }
 

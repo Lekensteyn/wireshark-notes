@@ -1,0 +1,210 @@
+1 KEX_RSA							1 KEX_RSA
+2 KEX_RSA							2 KEX_RSA
+3 KEX_RSA							3 KEX_RSA
+4 KEX_RSA							4 KEX_RSA
+5 KEX_RSA							5 KEX_RSA
+6 KEX_RSA							6 KEX_RSA
+7 KEX_RSA							7 KEX_RSA
+8 KEX_RSA							8 KEX_RSA
+9 KEX_RSA							9 KEX_RSA
+10 KEX_RSA							10 KEX_RSA
+11 KEX_DH							11 KEX_DH
+12 KEX_DH							12 KEX_DH
+13 KEX_DH							13 KEX_DH
+14 KEX_DH							14 KEX_DH
+15 KEX_DH							15 KEX_DH
+16 KEX_DH							16 KEX_DH
+17 KEX_DH							17 KEX_DH
+18 KEX_DH							18 KEX_DH
+19 KEX_DH							19 KEX_DH
+20 KEX_DH							20 KEX_DH
+21 KEX_DH							21 KEX_DH
+22 KEX_DH							22 KEX_DH
+23 KEX_DH							23 KEX_DH
+24 KEX_DH							24 KEX_DH
+25 KEX_DH							25 KEX_DH
+26 KEX_DH							26 KEX_DH
+27 KEX_DH							27 KEX_DH
+44 KEX_PSK						      <
+45 KEX_DH						      <
+46 KEX_RSA_PSK						      <
+47 KEX_RSA							47 KEX_RSA
+48 KEX_DH							48 KEX_DH
+49 KEX_DH							49 KEX_DH
+50 KEX_DH							50 KEX_DH
+51 KEX_DH							51 KEX_DH
+52 KEX_DH							52 KEX_DH
+53 KEX_RSA							53 KEX_RSA
+54 KEX_DH							54 KEX_DH
+55 KEX_DH							55 KEX_DH
+56 KEX_DH							56 KEX_DH
+57 KEX_DH							57 KEX_DH
+58 KEX_DH							58 KEX_DH
+59 KEX_RSA							59 KEX_RSA
+60 KEX_RSA							60 KEX_RSA
+61 KEX_RSA							61 KEX_RSA
+62 KEX_DH							62 KEX_DH
+63 KEX_DH							63 KEX_DH
+64 KEX_DH							64 KEX_DH
+65 KEX_RSA							65 KEX_RSA
+66 KEX_DH							66 KEX_DH
+67 KEX_DH							67 KEX_DH
+68 KEX_DH							68 KEX_DH
+69 KEX_DH							69 KEX_DH
+70 KEX_DH							70 KEX_DH
+96 KEX_RSA							96 KEX_RSA
+97 KEX_RSA							97 KEX_RSA
+98 KEX_RSA							98 KEX_RSA
+99 KEX_DH							99 KEX_DH
+100 KEX_RSA							100 KEX_RSA
+101 KEX_DH							101 KEX_DH
+102 KEX_DH							102 KEX_DH
+103 KEX_DH							103 KEX_DH
+104 KEX_DH							104 KEX_DH
+105 KEX_DH							105 KEX_DH
+106 KEX_DH							106 KEX_DH
+107 KEX_DH							107 KEX_DH
+108 KEX_DH							108 KEX_DH
+109 KEX_DH							109 KEX_DH
+132 KEX_RSA							132 KEX_RSA
+133 KEX_DH							133 KEX_DH
+134 KEX_DH							134 KEX_DH
+135 KEX_DH							135 KEX_DH
+136 KEX_DH							136 KEX_DH
+137 KEX_DH							137 KEX_DH
+138 KEX_PSK						      <
+139 KEX_PSK							139 KEX_PSK
+140 KEX_PSK							140 KEX_PSK
+141 KEX_PSK							141 KEX_PSK
+142 KEX_DH						      <
+143 KEX_DH						      <
+144 KEX_DH						      <
+145 KEX_DH						      <
+146 KEX_RSA_PSK						      <
+147 KEX_RSA_PSK						      <
+148 KEX_RSA_PSK						      <
+149 KEX_RSA_PSK						      <
+150 KEX_RSA							150 KEX_RSA
+151 KEX_DH							151 KEX_DH
+152 KEX_DH							152 KEX_DH
+153 KEX_DH							153 KEX_DH
+154 KEX_DH							154 KEX_DH
+155 KEX_DH							155 KEX_DH
+156 KEX_RSA							156 KEX_RSA
+157 KEX_RSA							157 KEX_RSA
+158 KEX_DH							158 KEX_DH
+159 KEX_DH							159 KEX_DH
+160 KEX_DH							160 KEX_DH
+161 KEX_DH							161 KEX_DH
+162 KEX_DH							162 KEX_DH
+163 KEX_DH							163 KEX_DH
+164 KEX_DH							164 KEX_DH
+165 KEX_DH							165 KEX_DH
+166 KEX_DH							166 KEX_DH
+167 KEX_DH							167 KEX_DH
+168 KEX_PSK						      <
+169 KEX_PSK						      <
+170 KEX_DH						      <
+171 KEX_DH						      <
+172 KEX_RSA_PSK						      <
+173 KEX_RSA_PSK						      <
+174 KEX_PSK						      <
+175 KEX_PSK						      <
+176 KEX_PSK						      <
+177 KEX_PSK						      <
+178 KEX_DH						      <
+179 KEX_DH						      <
+180 KEX_DH						      <
+181 KEX_DH						      <
+182 KEX_RSA_PSK						      <
+183 KEX_RSA_PSK						      <
+184 KEX_RSA_PSK						      <
+185 KEX_RSA_PSK						      <
+186 KEX_RSA							186 KEX_RSA
+187 KEX_DH							187 KEX_DH
+188 KEX_DH							188 KEX_DH
+189 KEX_DH							189 KEX_DH
+190 KEX_DH							190 KEX_DH
+191 KEX_DH							191 KEX_DH
+192 KEX_RSA							192 KEX_RSA
+193 KEX_DH							193 KEX_DH
+194 KEX_DH							194 KEX_DH
+195 KEX_DH							195 KEX_DH
+196 KEX_DH							196 KEX_DH
+197 KEX_DH							197 KEX_DH
+49153 KEX_ECDH						      |	49153 KEX_DH
+49154 KEX_ECDH						      |	49154 KEX_DH
+49155 KEX_ECDH						      |	49155 KEX_DH
+49156 KEX_ECDH						      |	49156 KEX_DH
+49157 KEX_ECDH						      |	49157 KEX_DH
+49158 KEX_ECDH						      |	49158 KEX_DH
+49159 KEX_ECDH						      |	49159 KEX_DH
+49160 KEX_ECDH						      |	49160 KEX_DH
+49161 KEX_ECDH						      |	49161 KEX_DH
+49162 KEX_ECDH						      |	49162 KEX_DH
+49163 KEX_ECDH						      |	49163 KEX_DH
+49164 KEX_ECDH						      |	49164 KEX_DH
+49165 KEX_ECDH						      |	49165 KEX_DH
+49166 KEX_ECDH						      |	49166 KEX_DH
+49167 KEX_ECDH						      |	49167 KEX_DH
+49168 KEX_ECDH						      |	49168 KEX_DH
+49169 KEX_ECDH						      |	49169 KEX_DH
+49170 KEX_ECDH						      |	49170 KEX_DH
+49171 KEX_ECDH						      |	49171 KEX_DH
+49172 KEX_ECDH						      |	49172 KEX_DH
+49173 KEX_ECDH						      |	49173 KEX_DH
+49174 KEX_ECDH						      |	49174 KEX_DH
+49175 KEX_ECDH						      |	49175 KEX_DH
+49176 KEX_ECDH						      |	49176 KEX_DH
+49177 KEX_ECDH						      |	49177 KEX_DH
+49187 KEX_ECDH						      |	49187 KEX_DH
+49188 KEX_ECDH						      |	49188 KEX_DH
+49189 KEX_ECDH						      |	49189 KEX_DH
+49190 KEX_ECDH						      |	49190 KEX_DH
+49191 KEX_ECDH						      |	49191 KEX_DH
+49192 KEX_ECDH						      |	49192 KEX_DH
+49193 KEX_ECDH						      |	49193 KEX_DH
+49194 KEX_ECDH						      |	49194 KEX_DH
+49195 KEX_ECDH						      |	49195 KEX_DH
+49196 KEX_ECDH						      |	49196 KEX_DH
+49197 KEX_ECDH						      |	49197 KEX_DH
+49198 KEX_ECDH						      |	49198 KEX_DH
+49199 KEX_ECDH						      |	49199 KEX_DH
+49200 KEX_ECDH						      |	49200 KEX_DH
+49201 KEX_ECDH						      |	49201 KEX_DH
+49202 KEX_ECDH						      |	49202 KEX_DH
+49203 KEX_ECDH						      <
+49204 KEX_ECDH						      <
+49205 KEX_ECDH						      <
+49206 KEX_ECDH						      <
+49207 KEX_ECDH						      <
+49208 KEX_ECDH						      <
+49209 KEX_ECDH						      <
+49210 KEX_ECDH						      <
+49211 KEX_ECDH						      <
+49252 KEX_PSK						      <
+49253 KEX_PSK						      <
+49256 KEX_RSA_PSK					      <
+49257 KEX_RSA_PSK					      <
+49258 KEX_PSK						      <
+49259 KEX_PSK						      <
+49262 KEX_RSA_PSK					      <
+49263 KEX_RSA_PSK					      <
+49294 KEX_PSK						      <
+49295 KEX_PSK						      <
+49298 KEX_RSA_PSK					      <
+49299 KEX_RSA_PSK					      <
+49300 KEX_PSK						      <
+49301 KEX_PSK						      <
+49304 KEX_RSA_PSK					      <
+49305 KEX_RSA_PSK					      <
+49316 KEX_PSK						      <
+49317 KEX_PSK						      <
+49320 KEX_PSK						      <
+49321 KEX_PSK						      <
+49322 KEX_PSK						      <
+49323 KEX_PSK						      <
+65278 KEX_RSA						      <
+65279 KEX_RSA						      <
+65504 KEX_RSA						      <
+65505 KEX_RSA						      <
