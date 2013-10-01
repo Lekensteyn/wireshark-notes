@@ -4,14 +4,14 @@
 
 #IV=
 #KEY=
-C=aes-256-cbc
+C=${CIPHER:-aes-256-cbc}
 
 if [ $# -ge 2 -a $# -le 3 ]; then
 	debug_file="$1"
 	mode=$2
 	start_frame=$3
 
-	eval $(awk -vstart_frame=$start_frame '
+	material=$(awk -vstart_frame=$start_frame '
 function try_name(name) {
 	if (frame >= start_frame && !found[name]) {
 		key_name = name;
@@ -20,8 +20,9 @@ function try_name(name) {
 }
 /^\| / {
 	if (key_name) {
-		for (i=2; i<18; i++)
-			key = key $i;
+		# handle at most 16 bytes of hex data
+		key = substr($0, 3, 3 * 16);
+		gsub(/ /, "", key);
 	}
 }
 ! /^\| / {
@@ -37,6 +38,9 @@ function try_name(name) {
 /^Client Write IV/ { try_name("CIV"); }
 /^Server Write IV/ { try_name("SIV"); }
 ' "$debug_file")
+
+	[ -z "${SHOWKEYS:+x}" ] || echo "$material" >&2
+	eval "$material"
 
 	[ -z "$IV" ] || echo "Warning: IV from debug won't be used" >&2
 	[ -z "$KEY" ] || echo "Warning: KEY from debug won't be used" >&2
@@ -57,8 +61,23 @@ function try_name(name) {
 
 elif [ $# -lt 2 ]; then
 	if [ -z "$IV" -o -z "$KEY" ]; then
-		echo "Usage: echo hh hh.. | $0 debug-file mode [start frame]" >&2
-		echo "Usage: IV=... KEY=... $0 hh hh hh hh.." >&2
+		cat <<EOF >&2
+Usage: echo hh hh.. | $0 debug-file mode [start-frame]
+Usage: IV=... KEY=... $0 hh hh hh hh..
+
+debug-file is created with 'wireshark -o ssl.debug_file:debug-file'
+
+mode is either c(lient) or s(server).
+
+Only the first Master Secret starting at or after start-frame are used (if
+omitted, it will use the first occurrence).
+
+The CIPHER environment variable (default: aes-256-cbc) can be used to specify to
+cipher.
+
+Set the SHOWKEYS envvar to show the keys and ciphers extracted from the debug
+file.
+EOF
 		exit 1
 	fi
 fi
@@ -67,8 +86,17 @@ if [ $# -gt 3 ]; then
 	echo "$*"
 else
 	awk '
-/^\| / { for (i=2; i<18; i++) print $i; }
-! /^\| / { print; }
+{
+	for (i=1; i<NF; i++) {
+		if ($i ~ /^[0-9a-fA-F]{2}/) {
+			print $i;
+		} else if (i > 1) {
+			# do not stop for at the first | in "| 12 34 |", but at
+			# the last "|"
+			break;
+		}
+	}
+}
 '
 fi |
 xxd -ps -r |
