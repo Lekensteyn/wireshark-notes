@@ -39,6 +39,11 @@ xsel | ./generate-wireshark-cs | sed s/{/,/ | sort -t, -n -k2,2 | sed s/,/{/
 ssort(){ sed s/{/,/ | sort -n -t, -k2,2 | sed s/,/{/; }
 grep ,KEX_ packet-ssl-utils.c | ssort > 1;(cat 1; xsel) | sort -k1,1 -t} -u | ssort > 2; colordiff -u 1 2
 
+# command to sort by Au(th) and show official TLS names
+openssl ciphers -V | sort -k6,6 |
+gawk '{split($1,a,",");$1=strtonum(a[1])*256+strtonum(a[2])}{print}' |
+sort -k6,6 | ./number-to-name.awk -vcmd='cat suites.txt' | column -t | less
+
 
 # dump CLIENT_RANDOM for every cipher
 openssl ciphers|tr : '\n' | grep -vE '^(PSK|SRP|ECDHE-ECDSA|ECDH)-|-DSS-' | while read cipher; do (echo 'GET / HTTP/1.0';sleep .1) | openssl s_client -connect localhost:4433 -cipher $cipher -msg 2>&1 | awk '/Master-Key:/{key=$2} {b=1;e=16;if(l==3)b=7;if(l==1)e=6;for(i=b;i<=e;i++)s=s$i;if(l--==1)r[s]=1}/ ClientHello|ServerHello$/{l=3;s=""} END{for(rnd in r)print "CLIENT_RANDOM",rnd,key}';done > all/s_client-keys.txt
