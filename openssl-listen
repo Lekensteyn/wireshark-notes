@@ -13,12 +13,20 @@ ecc_pub=secp384r1-rsa.crt
 PSK=12345678
 PSK=0102030405060708091011121314151617181920
 
-pkdir=$1
-portbase=${2:-4430}
+pkdir=$1; shift
+portbase=4430
+# assume that openssl options always start with -
+if [[ $1 != -* ]]; then
+    portbase=$1; shift
+    if ! [[ $portbase -gt 0 ]] || ! [[ $portbase -le 65535 ]]; then
+        echo "Port must be between 1 and 65535" >&2
+        exit 1
+    fi
+fi
 
 if [ -z "$pkdir" ]; then
     cat <<EOF
-Usage: $0 path-to-certsdir [port base]"
+Usage: $0 path-to-certsdir [port base] [s_server options]"
 openssl s_client will listen on three ports,
 starting at 'port base' (default 4430)
 EOF
@@ -73,7 +81,8 @@ gen_pk() {
 
 start_server() {
     local keyfile crtfile port auth ca_key= ca_crt= opts=()
-    auth=$1
+    auth=$1; shift
+    # remaining arguments should be passed to s_server
 
     case $auth in
     RSA)
@@ -113,7 +122,7 @@ start_server() {
 
     openssl s_server -accept $port \
         "${opts[@]}" \
-        -cert "$pkdir$crtfile" -key "$pkdir$keyfile" -www &
+        -cert "$pkdir$crtfile" -key "$pkdir$keyfile" -www "$@" &
     pids+=($!)
 }
 
@@ -126,7 +135,7 @@ cleanup() {
 trap cleanup EXIT
 
 for auth in RSA ECDSA ECDH DSS; do
-    start_server $auth
+    start_server $auth "$@"
 done
 
 wait

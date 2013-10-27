@@ -2,10 +2,22 @@
 # Connects to a SSL host for a list of ciphers
 # Author: Peter Wu <lekensteyn@gmail.com>
 
-host=${1:-localhost}
-portbase=${2:-4430}
+host=localhost
+portbase=4430
 PSK=12345678
 PSK=0102030405060708091011121314151617181920
+
+# assume that openssl options always start with -
+if [[ $1 != -* ]]; then
+    host=$1; shift
+fi
+if [[ $1 != -* ]]; then
+    portbase=$1; shift
+    if ! [[ $portbase -gt 0 ]] || ! [[ $portbase -le 65535 ]]; then
+        echo "Port must be between 1 and 65535" >&2
+        exit 1
+    fi
+fi
 
 s_client_client_random() {
     awk '
@@ -101,7 +113,7 @@ while read cipher; do
     openssl s_client -connect "$host:$port" -ign_eof -cipher "$cipher" \
         -no_comp \
         "${opts[@]}" \
-        -msg 2>&1 | s_client_client_random
+        -msg "$@" 2>&1 | s_client_client_random
 done
 
 # vim: set et sw=4 ts=4:
