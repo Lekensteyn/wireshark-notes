@@ -1,6 +1,9 @@
 /tmp/wireshark/configure --prefix=/tmp/wsroot --with-ssl --with-gtk2 --without-gtk3
+# CMake rocks!
+cmake -DCMAKE_INSTALL_PREFIX=/tmp/wsroot -DENABLE_GTK3=0 -DENABLE_PORTAUDIO=0 -DENABLE_QT5=0 -DENABLE_GEOIP=0 -DENABLE_KERBEROS=0 -DENABLE_SMI=0
 
-# libgcrypt RC2 fixing
+# libgcrypt RC2 fixing (accepted in git
+# http://lists.gnupg.org/pipermail/gcrypt-devel/2013-October/002428.html)
 # Fix compile issue (missing fig2dev in doc, Makefile.in in tests is not
 # generated (Makefile/autotools of the repo too old?))
 sed '/SUBDIRS/s/ doc tests//' -i Makefile.am && ./autogen.sh
@@ -17,6 +20,9 @@ openssl ciphers -V | awk -F'[, ]+' '{print $2, $3, $5}' | while read n1 n2 name;
 # find which ciphers are not yet supported (unsupported-new is from above)
 grep -E "$(cut -d' ' -f1 unsuppported-new.txt  openssl-supported-ciphers.txt | sort | uniq -d | tr '\n' '|' | sed 's/|$//')" unsuppported-new.txt -w
 
+
+# Get keys from NSS applications:
+SSLKEYLOGFILE=premaster.txt firefox
 
 # command to use key file from NSS
 /tmp/wsroot/bin/wireshark -o ssl.keylog_file:$PWD/s_client-keys.txt s_client.capng -o http.ssl.port:4433 -o ssl.debug_file:s_client-debug.txt
