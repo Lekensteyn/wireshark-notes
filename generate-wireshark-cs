@@ -125,6 +125,8 @@ p() {
 	fi
 
 	[[ $1 == *_GCM_* ]] && mode=GCM ||
+	[[ $1 == *_CCM ]] && mode=CCM ||
+	[[ $1 == *_CCM_8 ]] && mode=CCM_8 ||
 	case $cipher in
 	AES|AES256|DES|3DES|CAMELLIA128|CAMELLIA256|SEED|IDEA|RC2)
 		mode=CBC ;;
