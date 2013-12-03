@@ -13,6 +13,14 @@ make install
 # for libgcrypt-config test in wireshark ./configure
 PATH=/tmp/libgcrypt/prefix/bin:$PATH
 
+# Build cyassl for AES-CCM testing
+patch -p1 < cyassl-Implement-SSLKEYLOGFILE-support-for-ClientRandom.patch
+autoreconf -fiv
+./configure --enable-{opensslextra,dtls,ipv6,sniffer,aes{c,g}cm,camellia,md2,dsa,ecc,psk,webserver,sni}
+make
+examples/server/server -p 4433
+SSLKEYLOGFILE=premaster.txt examples/client/client -l AES256-SHA -p 4433
+
 # find which suites are not supported yet (unsupported.txt)
 awk -vsrc=/tmp/wireshark/epan/dissectors/packet-ssl-utils.c -F'[ {,]+' 'BEGIN{while(getline <src)if(/^ *\{.*,KEX_/)a[$2]=1}{if(!a[$1])print}' suites.txt
 # find which ciphers openssl supports
