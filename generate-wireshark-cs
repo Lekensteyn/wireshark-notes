@@ -137,7 +137,7 @@ p() {
 	esac
 
 cat <<EOF
-    {$num,KEX_$kex,ENC_$cipher,$blocksize,$keysize,$exp_keysize,DIG_$dig, SSL_CIPHER_MODE_$mode},   /* $1 */
+    {$hexid,KEX_$kex,ENC_$cipher,$blocksize,$keysize,$exp_keysize,DIG_$dig, SSL_CIPHER_MODE_$mode},   /* $1 */
 EOF
 }
 
