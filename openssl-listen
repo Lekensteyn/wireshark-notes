@@ -15,15 +15,6 @@ PSK=0102030405060708091011121314151617181920
 
 pkdir=$1; shift
 portbase=4430
-# assume that openssl options always start with -
-if [[ $1 != -* ]]; then
-    portbase=$1; shift
-    if ! [[ $portbase -gt 0 ]] || ! [[ $portbase -le 65535 ]]; then
-        echo "Port must be between 1 and 65535" >&2
-        exit 1
-    fi
-fi
-
 if [ -z "$pkdir" ]; then
     cat <<EOF
 Usage: $0 path-to-certsdir [port base] [s_server options]"
@@ -32,6 +23,15 @@ starting at 'port base' (default 4430)
 EOF
     exit 1
 fi
+# assume that openssl options always start with -
+if [ -n "$1" ] && [[ $1 != -* ]]; then
+    portbase=$1; shift
+    if ! [[ $portbase -gt 0 ]] || ! [[ $portbase -le 65535 ]]; then
+        echo "Port must be between 1 and 65535" >&2
+        exit 1
+    fi
+fi
+
 [[ $pkdir == */ ]] || pkdir+=/
 
 if ! mkdir -p "$pkdir"; then

@@ -2,16 +2,18 @@
 # Connects to a SSL host for a list of ciphers
 # Author: Peter Wu <lekensteyn@gmail.com>
 
+# Usage: $0 [host [portbase]] [openssl options]
+# Defaults for host and portbase are shown below:
 host=localhost
 portbase=4430
 PSK=12345678
 PSK=0102030405060708091011121314151617181920
 
 # assume that openssl options always start with -
-if [[ $1 != -* ]]; then
+if [ -n "$1" ] && [[ $1 != -* ]]; then
     host=$1; shift
 fi
-if [[ $1 != -* ]]; then
+if [ -n "$1" ] && [[ $1 != -* ]]; then
     portbase=$1; shift
     if ! [[ $portbase -gt 0 ]] || ! [[ $portbase -le 65535 ]]; then
         echo "Port must be between 1 and 65535" >&2
@@ -44,7 +46,7 @@ s_client_client_random() {
     }
 
     # Match TLS 1.2 Random bytes (over three lines)
-    / ClientHello|ServerHello$/{version=3;l=3;s=""}
+    / ClientHello/{version=3;l=3;s=""}
     # Match SSLv2 Challenge
     / CLIENT-HELLO$/{version=2;l=4;s=""}
 

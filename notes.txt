@@ -6,12 +6,15 @@ cmake -DCMAKE_INSTALL_PREFIX=/tmp/wsroot -DENABLE_GTK3=0 -DENABLE_PORTAUDIO=0 -D
 # http://lists.gnupg.org/pipermail/gcrypt-devel/2013-October/002428.html)
 # Fix compile issue (missing fig2dev in doc, Makefile.in in tests is not
 # generated (Makefile/autotools of the repo too old?))
+sed '/^tests\/Makefile$/d' -i configure.ac &&
 sed '/SUBDIRS/s/ doc tests//' -i Makefile.am && ./autogen.sh
 mkdir build && cd build
 ../configure --disable-static --disable-padlock-support --prefix=/tmp/libgcrypt/prefix
 make install
 # for libgcrypt-config test in wireshark ./configure
 PATH=/tmp/libgcrypt/prefix/bin:$PATH
+# for cmake add:
+-DGCRYPT_INCLUDE_DIR=/tmp/libgcrypt/prefix/include -DGCRYPT_LIBRARY=/tmp/libgcrypt/prefix/lib/libgcrypt.so
 
 # Build cyassl for AES-CCM testing
 patch -p1 < cyassl-Implement-SSLKEYLOGFILE-support-for-ClientRandom.patch
