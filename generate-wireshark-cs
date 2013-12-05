@@ -61,6 +61,7 @@ p() {
 	[[ $keysize != [0-9]* ]] || cipher=$cipher$keysize
 	case $cipher in
 	RC[24]40)	keysize=128; exp_keysize=40 ;;
+	RC[24]56)	keysize=128; exp_keysize=56 ;;
 	*128|*256) ;;
 	SEED|IDEA)	keysize=128 ;;
 	NULL)	keysize=0 ;;
@@ -89,8 +90,8 @@ p() {
 	DES|3DES|RC4|RC2|IDEA|AES256|CAMELLIA128|CAMELLIA256|NULL|IDEA) ;;
 	DES40)	cipher=DES ;;
 	SEED*)	cipher=SEED ;;
-	RC240)	cipher=RC2 ;;
-	RC440|RC4128)	cipher=RC4 ;;
+	RC240|RC256)	cipher=RC2 ;;
+	RC440|RC4128|RC456)	cipher=RC4 ;;
 	*)
 		warn "Unknown cipher $cipher in $hexid $1"
 		return
