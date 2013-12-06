@@ -105,6 +105,8 @@ p() {
 		;;
 	esac
 
+	# diglen is unused here, but shown for clarity (when a new digest is
+	# added to packet-ssl-utils)
 	dig=${1##*_}
 	case $dig in
 	MD5)	diglen=16 ;;
@@ -112,8 +114,13 @@ p() {
 	SHA256)	diglen=32 ;;
 	SHA384) diglen=48 ;;
 	*)
-		warn "Unknown dig in $hexid $1 (dig=$dig)"
-		return
+		# CCM (counter with CBC-MAC) includes MAC already.
+		if [[ $1 == *_CCM_8 ]] || [[ $1 == *_CCM ]]; then
+			dig=NA
+		else
+			warn "Unknown dig in $hexid $1 (dig=$dig)"
+			return
+		fi
 		;;
 	esac
 
