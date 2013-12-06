@@ -16,6 +16,15 @@ warn() {
 	printf "$cb%s$ce\n" "$*" >&2
 }
 
+# printf conversions with padding
+_KEX=%-$(wc -L <<<KEX_RSA_PSK,)s
+_ENC=%-$(wc -L <<<ENC_CAMELLIA256,)s
+_IV_SZ=%2d
+_KEYSZ=%3d
+_EXP_KEYSZ=%3d
+_DIG=%-$(wc -L <<<DIG_SHA384,)s
+_MODE=%-$(wc -L <<<STREAM)s
+
 p() {
 	local tmp kex keysize exp_keysize=0 dig diglen mode us_export blocksize hexid
 	[ $# -gt 0 ] || return
@@ -145,9 +154,15 @@ p() {
 		;;
 	esac
 
-cat <<EOF
-    {$hexid,KEX_$kex,ENC_$cipher,$blocksize,$keysize,$exp_keysize,DIG_$dig, SSL_CIPHER_MODE_$mode},   /* $1 */
-EOF
+	printf \
+"    {$hexid,${_KEX}${_ENC}${_IV_SZ},${_KEYSZ},${_EXP_KEYSZ},${_DIG} SSL_CIPHER_MODE_${_MODE}},   /* $1 */\n" \
+	"KEX_$kex," \
+	"ENC_$cipher," \
+	$blocksize \
+	$keysize \
+	$exp_keysize \
+	"DIG_$dig," \
+	"$mode"
 }
 
 # expects a line like:
