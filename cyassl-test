@@ -1,0 +1,107 @@
+#!/bin/bash
+# Run cyassl ciphers
+# Example:
+# dumpcap -f '(host ::1 or host 127.0.0.1) and tcp port 4430' -i lo -w cyassl-tcp.pcapng
+# $0 premaster.txt
+
+port=4430
+SRCDIR=${SRCDIR:-.}
+OBJDIR=${OBJDIR:-$SRCDIR}
+# Program that should output supported ciphers, relative to $OBJDIR
+CPROG=supported-ciphers
+
+client=$OBJDIR/examples/client/client
+server=$OBJDIR/examples/server/server
+
+if [ -z "$1" ] || [[ $1 == -* ]]; then
+    cat <<USAGE
+Usage: $0 premaster-output.txt [client and server options]
+
+\$SRCDIR must contain cyassl sources (configured) if \$OBJDIR/$CPROG is
+not available. \$OBJDIR should be the build directory of cyassl, containing
+examples/{client/client,server/server} and $CPROG.
+
+Current values:
+OBJDIR=$OBJDIR
+SRCDIR=$SRCDIR
+USAGE
+    exit 1
+fi
+
+# Take absolute path because directory will be changed during test
+keylogfile=$(readlink -f "$1"); shift
+
+if [ ! -s "$OBJDIR/$CPROG" ]; then
+    if [ ! -e "$SRCDIR/src/internal.c" ]; then
+        echo "$SRCDIR/src/internal.c: not found"
+        exit 1
+    fi
+
+    # Program to display supported ciphers, tested with v2.8.4-25-g9fe165e
+    awk 'BEGIN{print "#include<cyassl/internal.h>";print "#include<stdio.h>"}
+     p{if(/}/)print 0;print;if(/}/)exit}/cipher_names/{print "char *p[]=";p=1}
+     END{print "int main(){char**c=p;while(*c)puts(*c++);return 0;}"}' \
+     "$SRCDIR/src/internal.c" > "$OBJDIR/$CPROG".c &&
+    make -C "$OBJDIR" CFLAGS="-I$SRCDIR \$(AM_CFLAGS)" "$CPROG" ||
+exit 1
+fi
+
+run_tests() {
+    "$OBJDIR/$CPROG" | while read cipher; do
+        fail=false
+        opts=("$@")
+
+        case $cipher in
+        *-ECDSA-*)
+            cname=ecc
+            kname=ecc-key
+            ;;
+        ECDH-RSA-*)
+            cname=ecc-rsa
+            kname=ecc-key
+            ;;
+        PSK-*)
+            cname=
+            kname=
+            # test key is 1a2b3c4d
+            opts+=( -s )
+            ;;
+        *)
+            cname=cert
+            kname=server-key
+            ;;
+        esac
+
+        if [ -n "$cname" ]; then
+            opts+=( -c "certs/server-$cname.pem"
+                    -k "certs/$kname.pem" )
+        fi
+
+        # Certs are relative to SRCDIR
+        cd "$SRCDIR"
+
+        # Start server with given cipher (key logging is done below)
+        SSLKEYLOGFILE= \
+        $server "${opts[@]}" -d -l $cipher & pid=$!
+
+        # give the server some time to start
+        sleep .1
+        echo .
+
+        # send a GET request
+        opts+=( -g )
+
+        SSLKEYLOGFILE=$keylogfile \
+        $client "${opts[@]}" -xd -l $cipher || fail=true
+        wait $pid || fail=true
+
+        if $fail; then
+            echo 'Server or client failed!'
+            exit
+        fi
+    done
+}
+
+run_tests -p $port "$@"
+
+echo OK
