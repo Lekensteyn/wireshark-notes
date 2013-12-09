@@ -39,6 +39,7 @@ p() {
 
 	tmp=${1%%_WITH_*}
 	tmp=${tmp%_EXPORT}
+	tmp=${tmp%_EXPORT1024}
 	tmp=${tmp#TLS_}
 	case $tmp in
 	PSK)		kex=PSK ;;
