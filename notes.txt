@@ -32,8 +32,10 @@ see also cyassl-test (in this repo) for testing all supported ciphers
  -Y not\ ssl.handshake.type==2 |
  awk '$2~/0x/{if(n)print n;printf("%s ",$2);n=$1}$2=="HTTP/1.0"{print $2;n=""}'
 
+# create suites.txt from http://www.iana.org/assignments/tls-parameters/tls-parameters-4.csv
+gawk -n -F '[,"]+' '$4~/^TLS/{print int($2)*0x100+int($3), $4}' tls-parameters-4.csv > suites.txt
 # find which suites are not supported yet (unsupported.txt)
-awk -vsrc=/tmp/wireshark/epan/dissectors/packet-ssl-utils.c -F'[ {,]+' 'BEGIN{while(getline <src)if(/^ *\{.*,KEX_/)a[$2]=1}{if(!a[$1])print}' suites.txt
+gawk -n -vsrc=/tmp/wireshark/epan/dissectors/packet-ssl-utils.c -F'[ {,]+' 'BEGIN{while(getline <src)if(/^ *\{.*,KEX_/)a[int($2)]=1}{if(!a[int($1)])print}' suites.txt
 # find which ciphers openssl supports
 openssl ciphers -V | awk -F'[, ]+' '{print $2, $3, $5}' | while read n1 n2 name; do echo $(($n1*0x100 + $n2)) $name;done|sort -n > openssl-supported-ciphers.txt
 # find which ciphers are not yet supported (unsupported-new is from above)
