@@ -78,7 +78,8 @@ s_client_client_random() {
 
 # When stdin is a TTY, try all ciphers
 if [ -t 0 ]; then
-    openssl ciphers -V
+    # Use only SSLv3 and TLSv1 ciphers, do not use SSLv2
+    openssl ciphers -V -tls1 ALL:NULL
 else
     # otherwise if not TTY, pass-through (useful for grep)
     cat

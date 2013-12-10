@@ -120,6 +120,10 @@ start_server() {
             "$ca_key" "$ca_crt" || return 1
     fi
 
+    # Enable insecure ciphers too, this script is for generating all possible
+    # test samples supported by openssl.
+    opts+=( -cipher ALL:NULL )
+
     openssl s_server -accept $port \
         "${opts[@]}" \
         -cert "$pkdir$crtfile" -key "$pkdir$keyfile" -www "$@" &

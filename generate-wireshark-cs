@@ -54,7 +54,10 @@ p() {
 	esac
 
 	# HACK HACK HACK
-	tmp=${1#*WITH_}
+	tmp=$1
+	# prevent seeing 56-bit export cipher as 64-bit DES
+	tmp=${tmp/EXPORT1024_WITH_DES_CBC_/EXPORT1024_WITH_DES_56_CBC_}
+	tmp=${tmp#*WITH_}
 	cipher=${tmp%%_*}
 	tmp=${tmp/_CBC_/_}
 	tmp=${tmp#${cipher}_} # now continue for keysize
@@ -68,6 +71,7 @@ p() {
 	NULL)	keysize=0 ;;
 	DES)	keysize=64 ;;
 	DES40)	keysize=64; exp_keysize=40 ;;
+	DES56)	keysize=64; exp_keysize=56 ;;
 	3DES)
 		if [[ $keysize == EDE ]]; then
 			keysize=192
@@ -89,7 +93,7 @@ p() {
 		cipher=AES
 		;;
 	DES|3DES|RC4|RC2|IDEA|AES256|CAMELLIA128|CAMELLIA256|NULL|IDEA) ;;
-	DES40)	cipher=DES ;;
+	DES40|DES56)	cipher=DES ;;
 	SEED*)	cipher=SEED ;;
 	RC240|RC256)	cipher=RC2 ;;
 	RC440|RC4128|RC456)	cipher=RC4 ;;

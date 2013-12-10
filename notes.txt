@@ -24,20 +24,20 @@ make
 examples/server/server -p 4433
 SSLKEYLOGFILE=premaster.txt examples/client/client -l AES256-SHA -p 4433
 see also cyassl-test (in this repo) for testing all supported ciphers
-# Show a list of cipher suites from ClientHello and the HTTP version (or the
-# number of the ClientHello if decryption failed).
-/tmp/wsbuild/tshark -r cyassl-tcp.pcapng.gz -ohttp.ssl.port:4430 \
- -ossl.keylog_file:premaster.txt -ossl.psk:1a2b3c4d -Tfields -e frame.number \
- -e ssl.handshake.ciphersuite -e http.request.version \
- -Y not\ ssl.handshake.type==2 |
- awk '$2~/0x/{if(n)print n;printf("%s ",$2);n=$1}$2=="HTTP/1.0"{print $2;n=""}'
+# Show a list of cipher suite from ServerHello and the HTTP version (or the
+# number of the ServerHello if decryption failed).
+/tmp/wsbuild/tshark -r cyassl-tcp.pcapng.gz -ohttp.ssl.port:4430-4433 \
+ -ossl.keylog_file:premaster.txt -ossl.psk:1a2b3c4d -Tfields \
+ -e frame.number -e ssl.handshake.ciphersuite -e http.request.version \
+ -Y 'ssl.handshake.type==2||ssl.record.content_type==23' |
+ awk '$2~/0x/{if(n)print n;printf("%s ",$2);n=$1}$2=="HTTP/1.0"{print $2;n=""}END{if(n)print n}'
 
 # create suites.txt from http://www.iana.org/assignments/tls-parameters/tls-parameters-4.csv
 gawk -n -F '[,"]+' '$4~/^TLS/{print int($2)*0x100+int($3), $4}' tls-parameters-4.csv > suites.txt
 # find which suites are not supported yet (unsupported.txt)
 gawk -n -vsrc=/tmp/wireshark/epan/dissectors/packet-ssl-utils.c -F'[ {,]+' 'BEGIN{while(getline <src)if(/^ *\{.*,KEX_/)a[int($2)]=1}{if(!a[int($1)])print}' suites.txt
 # find which ciphers openssl supports
-openssl ciphers -V | awk -F'[, ]+' '{print $2, $3, $5}' | while read n1 n2 name; do echo $(($n1*0x100 + $n2)) $name;done|sort -n > openssl-supported-ciphers.txt
+openssl ciphers -tls1 -V ALL:NULL | tr , \  | while read x y _ name _;do echo $((x*0x100+y)) $name;done | sort -n > openssl-supported-ciphers.txt
 # find which ciphers are not yet supported (unsupported-new is from above)
 grep -E "$(cut -d' ' -f1 unsuppported-new.txt  openssl-supported-ciphers.txt | sort | uniq -d | tr '\n' '|' | sed 's/|$//')" unsuppported-new.txt -w
 
