@@ -179,7 +179,7 @@ p() {
 	esac
 
 	printf \
-"    {$hexid,${_KEX}${_ENC}${_IV_SZ},${_KEYSZ},${_EXP_KEYSZ},${_DIG} SSL_CIPHER_MODE_${_MODE}},   /* $1 */\n" \
+"    {$hexid,${_KEX}${_ENC}${_IV_SZ},${_KEYSZ},${_EXP_KEYSZ},${_DIG} MODE_${_MODE}},   /* $1 */\n" \
 	"KEX_$kex," \
 	"ENC_$cipher," \
 	$blocksize \
