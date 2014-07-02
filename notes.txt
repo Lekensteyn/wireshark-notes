@@ -1,6 +1,14 @@
 /tmp/wireshark/configure --prefix=/tmp/wsroot --with-ssl --with-gtk2 --without-gtk3
 # CMake rocks!
+CC=clang CXX=clang++ \
 cmake -DCMAKE_INSTALL_PREFIX=/tmp/wsroot -DENABLE_GTK3=0 -DENABLE_PORTAUDIO=0 -DENABLE_QT5=0 -DENABLE_GEOIP=0 -DENABLE_KERBEROS=0 -DENABLE_SMI=0
+-DCMAKE_BUILD_TYPE=Debug /tmp/wireshark -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address
+-DCMAKE_EXPORT_COMPILE_COMMANDS=1
+# Do not set CMAKE_C_FLAGS_DEBUG, it breaks (missing symbols)
+#clang-check -p /tmp/wsbuild epan/dissectors/packet-whois.c -ast-dump
+
+v1.99.0-rc1-578-gdbd409d clang cmake: 15s; make -j16: 1m34s
+v1.99.0-rc1-588-gc9694dc gcc cmake: 13.6s; make -j16: 1m37s
 
 # libgcrypt RC2 fixing (accepted in git
 # http://lists.gnupg.org/pipermail/gcrypt-devel/2013-October/002428.html)
@@ -147,3 +155,26 @@ openssl req -new -key dsa.pem -x509 -days 3650 -out dsa.crt -subj "/CN=*.local.a
 openssl ecparam -name prime192v1 -out ec.pem -genkey
 openssl req -new -key ec.pem -x509 -days 3650 -out ec.crt -subj "/CN=*.local.al.lekensteyn.nl/OU=EC"
 
+
+http://wiki.wireshark.org/SampleCaptures?action=AttachFile
+// Find all extensions
+$('a[href*="do=get"]').toArray().map(function (e){ var m=e.href.match(/\.([^.?]+(\.gz|bz2)?)$/); return m?m[1]:"";}).reduce(function (prev, cur){ if(prev.indexOf(cur)==-1)prev.push(cur);return prev;}, [])
+// Find all extensions, count per extension
+$('a[href*="do=get"]').toArray().map(function (e){ var m=e.href.match(/\.([^.?]+(\.gz|bz2)?)$/); return m?m[1]:"";}).reduce(function (prev, cur){ if(cur in prev)prev[cur]++;else prev[cur]=1;return prev;},{})
+# Download captures
+wget -e robots=off -nc -r -l 1 --accept-regex='.*do=get.*(p?cap|pcapng)(\.gz)?$' --ignore-case http://wiki.wireshark.org/SampleCaptures?action=AttachFile
+# Symlink files (retains original name for easier updates)
+mkdir captures && cd captures && ln -s ../wiki.wireshark.org .;
+find wiki.wireshark.org/ -name '*target=*' | php -r 'while ($line = fgets(STDIN)) { $line = trim($line); symlink($line, urldecode(preg_replace("#.*target=#", "", $line))); }'
+# Find duplicates, list by md5, mtime, size, filename
+md5sum * | sort | uniq -w32 -D | while read sum file; do echo $sum $(date +"%Y-%m-%d %H:%M" -r "$file") "$(du -hD "$file")"; done
+# Archive captures/ (537M uncompressed, 223M gz, 177M xz)
+time tar cJhf captures.tar.xz --owner=root --group=root --exclude=wiki.wireshark.org captures/
+
+# Run tshark on all capture files
+time for i in captures/*;do [ -f "$i" ]||continue; name="${i##*/}"; /tmp/wsbuild/run/tshark -r "$i" > "tshark-0/$name.out" 2>"tshark-0/$name.err";done
+# Find interesting error files
+view -p $(grep -EL 'appears to have been cut short in the middle|appears to be damaged or corrupt|a capture file in a format' $(find -name '*.err' ! -empty))
+
+Problematic dissectors with reassembly patch:
+- 9p: returns offset which can be greater than tvb_captured_length()
