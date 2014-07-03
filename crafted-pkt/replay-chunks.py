@@ -52,8 +52,10 @@ class FollowParser(object):
 
     def add_data(self, data, is_reply):
         sock = self.sock_server if is_reply else self.sock_client
+        othersock = self.sock_client if is_reply else self.sock_server
         for i in range(0, len(data), self.chunk_size):
-            sock.send(data[i:i+self.chunk_size])
+            sock.sendall(data[i:i+self.chunk_size])
+            othersock.recv(self.chunk_size)
         print('{}: {}'.format('S->C' if is_reply else 'C->S', _dumpbytes(data)))
 
     def state_find_begin(self, line):
