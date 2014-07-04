@@ -85,12 +85,19 @@ class FollowParser(object):
         try:
             svr.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             svr.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            svr.bind(self.addr)
+            try:
+                svr.bind(self.addr)
+            except socket.error as e:
+                host, port = self.addr
+                print('bind({0}:{1}) failure: {2}'.format(host, port, e))
+                self.addr = ('127.9.0.1', port)
+                print('Falling back to {}:{}'.format(*self.addr))
+                svr.bind(self.addr)
             svr.listen(1)
             self.sock_client = socket.socket()
             self.sock_client.connect(self.addr)
             self.sock_server, remote_addr = svr.accept()
-        except:
+        finally:
             svr.close()
 
     def feed_data(self, line):
