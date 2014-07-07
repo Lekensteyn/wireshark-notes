@@ -171,10 +171,23 @@ md5sum * | sort | uniq -w32 -D | while read sum file; do echo $sum $(date +"%Y-%
 # Archive captures/ (537M uncompressed, 223M gz, 177M xz)
 time tar cJhf captures.tar.xz --owner=root --group=root --exclude=wiki.wireshark.org captures/
 
-# Run tshark on all capture files
-time for i in captures/*;do [ -f "$i" ]||continue; name="${i##*/}"; /tmp/wsbuild/run/tshark -r "$i" > "tshark-0/$name.out" 2>"tshark-0/$name.err";done
-# Find interesting error files
-view -p $(grep -EL 'appears to have been cut short in the middle|appears to be damaged or corrupt|a capture file in a format' $(find -name '*.err' ! -empty))
+# Save capture files from remote
+save(){ local d="pc:/tmp/wireshark-caps"; rsync -vasL "$d/captures/$1" "$d/tshark-${2:-1}/$1."{out,err} ./"${1%.*}/";}
+# Retrieve 2724 attachments (509MB) from https://www.wireshark.org/~darkjames/capture-files.txt
+time cut -d: -f2 ../capture-files.txt | sed 's,^,https:,' | xargs wget -a ../capture-files-wget.txt -nv --content-disposition
+# Rename the captured files such that attachment id is included
+time grep id= ../capture-files-wget.txt | sed 's/.*attachment.cgi?id=\([0-9]*\) \[[0-9/]*\] -> "/\1 /;s/" \[[12]\]$//' | while read id name; do mv "$name" -vi "$id-${name%.[0-9]}" ;done
+# Rename name that wget could not handle
+mv '4993-=?UTF-8?Q?PPP=2D=E8=BD=AC=E6=8D=A2=E5=90=8E=E6=96=87=E4=BB=B6=2D=E6=89=93=E5=BC=80=E6=95=B0=E6=8D=AE=E5=8C=85=E6=97=A0=E6=98=BE=E7=A4=BA=2Ecap?=' '4993-PPP-转换后文件-打开 数据包无显示.cap'
 
-Problematic dissectors with reassembly patch:
-- 9p: returns offset which can be greater than tvb_captured_length()
+# logcat testing
+for file in logcat-v*.txt;do for type in logcat logcat-brief logcat-process logcat-tag logcat-time logcat-thread logcat-threadtime logcat-long;do /tmp/wsbuild/run/tshark -r "$file" -F $type -w out/$file-$type.txt;done;done
+
+ASN.1 dissectors (make the "export" file first):
+asn1/x509sat$ ../../tools/asn2wrs.py -E -b -r Syntax -p x509sat -c ./x509sat.cnf -D . SelectedAttributeTypes.asn
+asn1/x509if$ ../../tools/asn2wrs.py -b -p x509if -c ./x509if.cnf -s ./packet-x509if-template -D . -O ../../epan/dissectors InformationFramework.asn ServiceAdministration.asn
+This solves this error:
+:0: UserWarning: Missing tag information for imported type DirectoryString from SelectedAttributeTypes (SelectedAttributeTypes)
+
+# Find all headers mentioning "fmt" or "fmt" pointers, but without attribute
+grep --exclude=\*.c -Hnr -e '\* *\(fmt\|format\) *\([,)]\|$\)' -C2 --color=always | awk '{s=s $0"\n"}/^[0-9m\[K\x1b]*--/{ if(!att){print s} att=0;s="" } /GNUC_PRINTF/{ att=1 }'
