@@ -12,6 +12,14 @@
 #   In my case I run schroot to enter a chroot with matching libs (see
 #   $remotecmd below).
 # - libnotify for notifications when ready.
+#
+# Usage:
+# $0 [buildhost]
+# - buildhost defaults to wireshark-builder (you can use user@host)
+# - Optional env vars:
+#   * CC, CXX, CFLAGS, CXXFLAGS - C/C++ compiler binary/flags
+#   * NOCOPY=1  - do not sync the generated binaries back
+#   * B32=1     - build 32-bit (using /usr/lib32)
 
 # LOCAL source dir (on non-volatile storage for reliability)
 localsrcdir=$HOME/projects/wireshark/
@@ -21,7 +29,7 @@ localsrcdir=$HOME/projects/wireshark/
 # Host wireshark-builder
 #    User foo
 #    Hostname 10.42.0.1
-remotehost=wireshark-builder
+remotehost=${1:-wireshark-builder}
 # Remote source dir, it can be volatile (tmpfs) since it is just a copy. On the
 # local side, it is recommended to create a symlink to the localsrcdir for
 # debugging purposes
@@ -38,8 +46,8 @@ CXX=${CXX:-c++}
 # For clang, `-O1` (or `-g`?) seems necessary to get something other than
 # "<optimized out>".
 # -O1 -g -gdwarf-4 -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
-CFLAGS=${CFLAGS:--fsanitize=address}
-CXXFLAGS=${CXXFLAGS:--fsanitize=address}
+CFLAGS=${CFLAGS:--fsanitize=address -fsanitize=undefined}
+CXXFLAGS=${CFLAGS:--fsanitize=address -fsanitize=undefined}
 
 LIBDIR=/usr/lib
 # Run with `B32=1 ./sync-build.sh` to build for multilib
@@ -132,6 +140,7 @@ while inotifywait -qq -e close_write "$sync"; do
         sleep 2
     else
         mkdir -p "$rundir"
+        [ -n "${NOCOPY:-}" ] ||
         rsync -av --delete \
             --exclude='.*.sw?' \
             --exclude='*.a' \
