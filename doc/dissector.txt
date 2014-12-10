@@ -1,0 +1,67 @@
+Wireshark dissector notes
+
+Based on doc/README.dissector and headers.
+
+Definitions:
+
+ - PDU: Protocol Data Unit: things like TCP packets may span multiple segments
+   which form one PDU. A single packet may also contain multiple PDUs, think of
+   a TCP packet containing multiple SSL records. The process of putting multiple
+   segments into one PDU is called reassembly (or defragmentation).
+
+ - tvbuff_t tvb(uff): Testy Virtual(-ize) Buffer of guint8*'s (epan/tvbuff.h).
+   Testy means exceptions in case of out of bounds access, virtual means that a
+   tvb can also be a view that is (a subset) of backing buffers. This likely
+   varies for every PDU.
+
+ - packet_info pinfo: Packet Info: state information for a PDU
+
+
+2.7.2 Reassembly when PDU size is not known before
+Always return the number of bytes that are successfully processed. For new
+dissectors registered with new_create_dissector_handle, be sure *NOT* to return
+0 if the protocol is correct!  Return values for the new-style dissectors (see
+new_dissector_t in epan/packet.h):
+
+ - negative: number of bytes needed for a complete PDU.
+ - positive: tvbuff contains a PDU with this size.
+ - zero: the tvbuff does not contain data for our protocol.
+
+The dissect_... function gets called in call_dissector_through_handle
+(epan/packet.c). Old style dissectors cannot return a value and will always be
+considered successful, see above for new-style dissectors.
+
+The non-zero value of a new-style dissector does not seem to matter, see callers
+of call_dissector_work. This may be a bug though.
+PROPOSAL:
+
+ - zero: protocol rejects data, certainly not our protocol.
+ - negative: reassembly requested, need at least this amount of data
+ - positive (equal to tvb_captured_length(tvb)): data is fully accepted
+ - positive (larger than captured length): should not be possible, dissector
+   assert and assume tvb_captured_length(tvb)
+ - positive (smaller than captured length): remainder is for reassembly.
+
+If reassembly is disabled or not supported (anymore) by parent, negative and
+positive should have no effect on further packets. can_desegment == 0 if
+desegmentation is not offered (anymore) by a dissector.
+
+packet_info fields:
+
+- desegment_offset: offset in tvb which should be kept for the next dissector
+  call.
+- desegment_len: estimated bytes that are *additionally* required for the PDU.
+  Next time, dissector gets called with data in the current tvb starting at
+  desegment_offset, with desegment_len extra bytes. If equal to
+  DESEGMENT_ONE_MORE_SEGMENT, then call dissector on next available segment.
+  When a positive value is set, then this cannot be changed anymore!
+
+
+tvbuff
+ - [captured_]length: size of the available, captured data (tvb_length is
+   deprecated, use get_captured_length instead).
+ - reported_length: length of the actual data according to a protocol (such as
+   the "Total length" field in an IPv4 header). This may be smaller than the
+   captured length. (XXX: can this be larger than the captured length? I think
+   so, when the capture got cut because it exceeds the snaplen). See also:
+   https://ask.wireshark.org/questions/6563/length-vs-reported_length-meaning
