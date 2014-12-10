@@ -81,6 +81,7 @@ if [ ! -e $builddir/CMakeCache.txt ]; then
         -DENABLE_GNUTLS=1 \
         -DENABLE_GCRYPT=1 \
         -DCMAKE_BUILD_TYPE=Debug \
+        -DENABLE_EXTRA_COMPILER_WARNINGS=1 \
         $remotesrcdir \
         -DCMAKE_LIBRARY_PATH=$LIBDIR \
         -DCMAKE_C_FLAGS=$(printf %q "$CFLAGS") \
@@ -132,6 +133,8 @@ while inotifywait -qq -e close_write "$sync"; do
     # IMPORTANT: do not sync top-level config.h or it will break OOT builds
     rsync -av --delete --exclude='.*.sw?' \
         --exclude=config.h \
+        --exclude=compile_commands.json \
+        --exclude=\*.tar\* \
         "$localsrcdir/" "$remotehost:$remotesrcdir/" &&
     ssh -t "$remotehost" "$remotecmd"
     retval=$?
