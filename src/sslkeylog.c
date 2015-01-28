@@ -78,7 +78,10 @@ int SSL_connect(SSL *ssl)
         _SSL_connect = (int (*)(SSL *ssl)) dlsym(RTLD_NEXT, "SSL_connect");
     }
     int ret = _SSL_connect(ssl);
-    if (ret >= 0) {
+    /* SSLv2 is not supported (Wireshark does not support it either). Write the
+     * logfile when the master key is available for SSLv3/TLSv1. */
+    if (ssl->s3 != NULL &&
+        ssl->session != NULL && ssl->session->master_key_length > 0) {
         init_keylog_file();
         if (keylog_file_fd >= 0) {
             dump_to_fd(ssl, keylog_file_fd);
