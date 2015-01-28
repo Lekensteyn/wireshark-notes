@@ -22,7 +22,7 @@
 #define FIRSTLINE_LEN (sizeof(FIRSTLINE) - 1)
 
 static int (*_SSL_connect)(SSL *ssl);
-static int key_logfile_fd = -1;
+static int keylog_file_fd = -1;
 
 static inline void put_hex(char *buffer, int pos, char c)
 {
@@ -57,17 +57,17 @@ static void dump_to_fd(SSL *ssl, int fd)
     write(fd, line, pos);
 }
 
-static void init_key_logfile(void)
+static void init_keylog_file(void)
 {
-    if (key_logfile_fd >= 0)
+    if (keylog_file_fd >= 0)
         return;
 
     const char *filename = getenv("SSLKEYLOGFILE");
     if (filename) {
-        key_logfile_fd = open(filename, O_WRONLY | O_APPEND | O_CREAT, 0644);
-        if (key_logfile_fd >= 0 && lseek(key_logfile_fd, 0, SEEK_END) == 0) {
+        keylog_file_fd = open(filename, O_WRONLY | O_APPEND | O_CREAT, 0644);
+        if (keylog_file_fd >= 0 && lseek(keylog_file_fd, 0, SEEK_END) == 0) {
             /* file is opened successfully and there is no data (pos == 0) */
-            write(key_logfile_fd, FIRSTLINE, FIRSTLINE_LEN);
+            write(keylog_file_fd, FIRSTLINE, FIRSTLINE_LEN);
         }
     }
 }
@@ -79,9 +79,9 @@ int SSL_connect(SSL *ssl)
     }
     int ret = _SSL_connect(ssl);
     if (ret >= 0) {
-        init_key_logfile();
-        if (key_logfile_fd >= 0) {
-            dump_to_fd(ssl, key_logfile_fd);
+        init_keylog_file();
+        if (keylog_file_fd >= 0) {
+            dump_to_fd(ssl, keylog_file_fd);
         }
     }
     return ret;
