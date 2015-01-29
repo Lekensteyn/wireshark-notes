@@ -71,12 +71,40 @@ static void init_keylog_file(void)
     }
 }
 
-static void tap_ssl_key(SSL *ssl)
+typedef struct ssl_tap_state {
+    int master_key_length;
+    unsigned char master_key[SSL_MAX_MASTER_KEY_LENGTH];
+
+} ssl_tap_state_t;
+
+/* Copies SSL state for later comparison in tap_ssl_key. */
+static void ssl_tap_state_init(ssl_tap_state_t *state, SSL *ssl)
+{
+    memset(state, 0, sizeof(ssl_tap_state_t));
+    if (ssl->session && ssl->session->master_key_length > 0) {
+        state->master_key_length = ssl->session->master_key_length;
+        memcpy(state->master_key, ssl->session->master_key,
+                ssl->session->master_key_length);
+    }
+}
+
+#define SSL_TAP_STATE(state, ssl) \
+    ssl_tap_state_t state; \
+    ssl_tap_state_init(&state, ssl)
+
+static void tap_ssl_key(SSL *ssl, ssl_tap_state_t *state)
 {
     /* SSLv2 is not supported (Wireshark does not support it either). Write the
      * logfile when the master key is available for SSLv3/TLSv1. */
     if (ssl->s3 != NULL &&
         ssl->session != NULL && ssl->session->master_key_length > 0) {
+        /* Skip writing keys if it did not change. */
+        if (state->master_key_length == ssl->session->master_key_length &&
+            memcmp(state->master_key, ssl->session->master_key,
+                    state->master_key_length) == 0) {
+            return;
+        }
+
         init_keylog_file();
         if (keylog_file_fd >= 0) {
             dump_to_fd(ssl, keylog_file_fd);
@@ -90,8 +118,9 @@ int SSL_connect(SSL *ssl)
     if (!func) {
         func = dlsym(RTLD_NEXT, __func__);
     }
+    SSL_TAP_STATE(state, ssl);
     int ret = func(ssl);
-    tap_ssl_key(ssl);
+    tap_ssl_key(ssl, &state);
     return ret;
 }
 
@@ -101,8 +130,9 @@ int SSL_do_handshake(SSL *ssl)
     if (!func) {
         func = dlsym(RTLD_NEXT, __func__);
     }
+    SSL_TAP_STATE(state, ssl);
     int ret = func(ssl);
-    tap_ssl_key(ssl);
+    tap_ssl_key(ssl, &state);
     return ret;
 }
 
@@ -112,7 +142,8 @@ int SSL_accept(SSL *ssl)
     if (!func) {
         func = dlsym(RTLD_NEXT, __func__);
     }
+    SSL_TAP_STATE(state, ssl);
     int ret = func(ssl);
-    tap_ssl_key(ssl);
+    tap_ssl_key(ssl, &state);
     return ret;
 }
