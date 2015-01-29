@@ -147,3 +147,27 @@ int SSL_accept(SSL *ssl)
     tap_ssl_key(ssl, &state);
     return ret;
 }
+
+int SSL_read(SSL *ssl, void *buf, int num)
+{
+    static int (*func)();
+    if (!func) {
+        func = dlsym(RTLD_NEXT, __func__);
+    }
+    SSL_TAP_STATE(state, ssl);
+    int ret = func(ssl, buf, num);
+    tap_ssl_key(ssl, &state);
+    return ret;
+}
+
+int SSL_write(SSL *ssl, const void *buf, int num)
+{
+    static int (*func)();
+    if (!func) {
+        func = dlsym(RTLD_NEXT, __func__);
+    }
+    SSL_TAP_STATE(state, ssl);
+    int ret = func(ssl, buf, num);
+    tap_ssl_key(ssl, &state);
+    return ret;
+}
