@@ -57,13 +57,20 @@ if [[ ${B32:-} ]]; then
     CXXFLAGS="$CXXFLAGS -m32"
 fi
 
+# Set envvar force_cmake=1 to call cmake before every build
+if [ -n "${force_cmake:-}" ]; then
+    force_cmake=true
+else
+    force_cmake=false
+fi
+
 # PATH is needed for /usr/bin/core_perl/pod2man (PCAP)
 # ENABLE_QT5=1: install qt5-tools on Arch Linux
-# 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-gtk2 lib32-krb5
+# 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-gtk3 lib32-krb5
 # lib32-portaudio  lib32-geoip lib32-libnl lib32-lua
 remotecmd="schroot -c chroot:arch -- sh -c '
 PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/core_perl;
-if [ ! -e $builddir/CMakeCache.txt ]; then
+if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
     mkdir -p $builddir && cd $builddir &&
     set -x &&
     time \
@@ -71,7 +78,7 @@ if [ ! -e $builddir/CMakeCache.txt ]; then
     PKG_CONFIG_LIBDIR=$LIBDIR/pkgconfig \
     cmake \
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
-        -DENABLE_GTK3=0 \
+        -DENABLE_GTK3=1 \
         -DENABLE_PORTAUDIO=1 \
         -DENABLE_QT5=1 \
         -DENABLE_GEOIP=1 \
