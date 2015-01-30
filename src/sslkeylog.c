@@ -15,6 +15,14 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#ifndef OPENSSL_SONAME
+/* fallback library if OpenSSL is not already loaded. Other values to try:
+ * libssl.so.0.9.8 libssl.so.1.0.0 */
+#   define OPENSSL_SONAME   "libssl.so"
+#endif
 
 #define PREFIX      "CLIENT_RANDOM "
 #define PREFIX_LEN  (sizeof(PREFIX) - 1)
@@ -112,11 +120,33 @@ static void tap_ssl_key(SSL *ssl, ssl_tap_state_t *state)
     }
 }
 
+static inline void *lookup_symbol(const char *sym)
+{
+    void *func = dlsym(RTLD_NEXT, sym);
+    /* Symbol not found, OpenSSL is not loaded (linked) so try to load it
+     * manually. This is error-prone as it depends on a fixed library name.
+     * Perhaps it should be an env name? */
+    if (!func) {
+        void *handle = dlopen(OPENSSL_SONAME, RTLD_LAZY);
+        if (!handle) {
+            fprintf(stderr, "Lookup error for %s: %s", sym, dlerror());
+            abort();
+        }
+        func = dlsym(handle, sym);
+        if (!func) {
+            fprintf(stderr, "Cannot lookup %s", sym);
+            abort();
+        }
+        dlclose(handle);
+    }
+    return func;
+}
+
 int SSL_connect(SSL *ssl)
 {
     static int (*func)();
     if (!func) {
-        func = dlsym(RTLD_NEXT, __func__);
+        func = lookup_symbol(__func__);
     }
     SSL_TAP_STATE(state, ssl);
     int ret = func(ssl);
@@ -128,7 +158,7 @@ int SSL_do_handshake(SSL *ssl)
 {
     static int (*func)();
     if (!func) {
-        func = dlsym(RTLD_NEXT, __func__);
+        func = lookup_symbol(__func__);
     }
     SSL_TAP_STATE(state, ssl);
     int ret = func(ssl);
@@ -140,7 +170,7 @@ int SSL_accept(SSL *ssl)
 {
     static int (*func)();
     if (!func) {
-        func = dlsym(RTLD_NEXT, __func__);
+        func = lookup_symbol(__func__);
     }
     SSL_TAP_STATE(state, ssl);
     int ret = func(ssl);
@@ -152,7 +182,7 @@ int SSL_read(SSL *ssl, void *buf, int num)
 {
     static int (*func)();
     if (!func) {
-        func = dlsym(RTLD_NEXT, __func__);
+        func = lookup_symbol(__func__);
     }
     SSL_TAP_STATE(state, ssl);
     int ret = func(ssl, buf, num);
@@ -164,7 +194,7 @@ int SSL_write(SSL *ssl, const void *buf, int num)
 {
     static int (*func)();
     if (!func) {
-        func = dlsym(RTLD_NEXT, __func__);
+        func = lookup_symbol(__func__);
     }
     SSL_TAP_STATE(state, ssl);
     int ret = func(ssl, buf, num);
