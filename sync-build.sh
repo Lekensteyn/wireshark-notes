@@ -46,8 +46,9 @@ CXX=${CXX:-c++}
 # For clang, `-O1` (or `-g`?) seems necessary to get something other than
 # "<optimized out>".
 # -O1 -g -gdwarf-4 -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
-CFLAGS=${CFLAGS:--fsanitize=address -fsanitize=undefined}
-CXXFLAGS=${CFLAGS:--fsanitize=address -fsanitize=undefined}
+_default_flags='-fsanitize=address -fsanitize=undefined -fdiagnostics-color=auto'
+CFLAGS=${CFLAGS:-$_default_flags}
+CXXFLAGS=${CFLAGS:-$_default_flags}
 
 LIBDIR=/usr/lib
 # Run with `B32=1 ./sync-build.sh` to build for multilib
@@ -139,8 +140,8 @@ while inotifywait -qq -e close_write "$sync"; do
 
     # IMPORTANT: do not sync top-level config.h or it will break OOT builds
     rsync -av --delete --exclude='.*.sw?' \
-        --exclude=config.h \
-        --exclude=compile_commands.json \
+        --exclude=/config.h \
+        --exclude=/compile_commands.json \
         --exclude=\*.tar\* \
         "$localsrcdir/" "$remotehost:$remotesrcdir/" &&
     ssh -t "$remotehost" "$remotecmd"
