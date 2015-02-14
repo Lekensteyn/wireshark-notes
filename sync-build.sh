@@ -18,8 +18,11 @@
 # - buildhost defaults to wireshark-builder (you can use user@host)
 # - Optional env vars:
 #   * CC, CXX, CFLAGS, CXXFLAGS - C/C++ compiler binary/flags
+#   * CXXFLAGS  - C++ compiler flags (defaults to CFLAGS)
+#   * EXTRA_CFLAGS - Appended to CFLAGS
 #   * NOCOPY=1  - do not sync the generated binaries back
 #   * B32=1     - build 32-bit (using /usr/lib32)
+#   * force_cmake - Set to non-empty to run cmake before make.
 
 # LOCAL source dir (on non-volatile storage for reliability)
 localsrcdir=$HOME/projects/wireshark/
@@ -46,9 +49,12 @@ CXX=${CXX:-c++}
 # For clang, `-O1` (or `-g`?) seems necessary to get something other than
 # "<optimized out>".
 # -O1 -g -gdwarf-4 -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
-_default_flags='-fsanitize=address -fsanitize=undefined -fdiagnostics-color=auto'
-CFLAGS=${CFLAGS:-$_default_flags}
-CXXFLAGS=${CFLAGS:-$_default_flags}
+_default_flags=\ -fsanitize=address
+_default_flags+=\ -fsanitize=undefined
+_default_flags+=\ -fdiagnostics-color=auto
+CFLAGS="${CFLAGS-$_default_flags}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
+# Default to use the same CXXFLAGS as CFLAGS (common case)
+CXXFLAGS="${CXXFLAGS-$CFLAGS}"
 
 LIBDIR=/usr/lib
 # Run with `B32=1 ./sync-build.sh` to build for multilib
@@ -69,7 +75,15 @@ fi
 # ENABLE_QT5=1: install qt5-tools on Arch Linux
 # 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-gtk3 lib32-krb5
 # lib32-portaudio  lib32-geoip lib32-libnl lib32-lua
-remotecmd="schroot -c chroot:arch -- sh -c '
+remotecmd="mysh() {
+    if [ -e /etc/arch-release ]; then
+        # In Arch root, so do a build
+        sh \"\$@\"
+    else
+        # Not in Arch root, so enter chroot to ensure matching libs
+        schroot -c chroot:arch -- sh \"\$@\";
+    fi
+}; mysh -c '
 PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/core_perl;
 if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
     mkdir -p $builddir && cd $builddir &&
@@ -96,7 +110,7 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DCMAKE_CXX_FLAGS=$(printf %q "$CXXFLAGS") \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=1
 fi &&
-time make -C $builddir -j16
+time make -C $builddir -j\$((\$(nproc)*2))
 '"
 
 
