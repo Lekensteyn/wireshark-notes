@@ -52,6 +52,20 @@ fi
 
 [ -z "$SSLDEBUG" ] || set -- -o ssl.debug_file:"$SSLDEBUG" "$@"
 
+# Set AddressSanitizer options if not already
+if [ -z "$ASAN_OPTIONS" ]; then
+	# Abort so it can be caught by gdb
+	ASAN_OPTIONS=abort_on_error=1
+	# Strip source path (assume /tmp/wireshark/)
+	ASAN_OPTIONS+=strip_path_prefix=/tmp/wireshark/
+	export ASAN_OPTIONS
+fi
+
+# For ASAN, disable slice allocator and use g_malloc directly.
+if [ -z "$G_SLICE" ]; then
+	export G_SLICE=always-malloc
+fi
+
 "${DEBUGGER[@]}" \
 "$WIRESHARK" -r "$CAPTFILE" \
 	-o http.ssl.port:443,4430-4433 \
