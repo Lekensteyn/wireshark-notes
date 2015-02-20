@@ -1,0 +1,92 @@
+#!/bin/bash
+# Run an interactive git bisect on wireshark (wireshark-gtk by default)
+#
+# Usage:
+# 1. Mark commits as good/bad (see man git-bisect)
+#    git bisect start <bad commit> <good commit>
+# 2. Optionally change the default target:
+#    export WIRESHARK_BIN=wireshark-gtk # for wireshark-gtk
+#    export WIRESHARK_BIN=              # build everything
+# 3. Start the interactive bisect:
+#    git bisect run ../wireshark-notes/bisect-wireshark
+# 4. After the script returns, the faulty commit is identified.
+
+# Wireshark program to build and launch (leave it empty to build everything)
+WIRESHARK_BIN=${WIRESHARK_BIN-wireshark}
+OUTDIR=/tmp/wsbuild
+buildlogdir=/tmp/wslogs
+
+SRCDIR=$(git rev-parse --show-toplevel)
+ver=$(git describe)
+buildlog=$buildlogdir/build-$(date +%Y-%m-%d-%H%M%S)-${ver}.txt
+
+mkdir -p "$buildlogdir" "$OUTDIR"
+if ! cd "$OUTDIR"; then
+    echo "Failed to create output dir"
+    exit 128 # abort
+fi
+
+make_local() {
+    CFLAGS="-fsanitize=address -fsanitize=undefined -fdiagnostics-color=auto"
+    set -x # Print commands as they are executed
+    # Configure
+    time cmake "$SRCDIR" -DCMAKE_BUILD_TYPE=Debug \
+        -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CFLAGS" &&
+    # Build
+    time make -C "$OUTDIR" -j$(nproc) $WIRESHARK_BIN
+}
+
+# Export variables and build locally (need recent Bash versions, the one
+# included with Ubuntu 12.04 won't do)
+script -e -c "date -R; $(declare -p WIRESHARK_BIN SRCDIR OUTDIR);
+$(declare -pf make_local); time make_local" "$buildlog"
+rc=$?
+if [ $rc = 0 ]; then
+    echo "Build OK"
+else
+    printf '\e[1;31m%\e[m\n' "Build failed with $rc"
+fi
+
+# Run it and interactively ask the user to tell whether it passed or not
+while true; do
+    if [ -n "$WIRESHARK_BIN" ]; then
+        "$OUTDIR/run/$WIRESHARK_BIN"
+    fi
+
+    cat <<EOF
+
+Commit: $ver
+Did it work?
+
+ 0) Yes.
+ 1) No.
+ 2) Not sure (skip this commit).
+ 3) Abort bisect, let me manually check.
+ x) I need to re-check (run $WIRESHARK_BIN again).
+
+EOF
+    read -p 'Your choice: ' choice
+    case $choice in
+    0)
+        echo Pass
+        exit 0
+        ;;
+    1)
+        echo FAIL
+        exit 1
+        ;;
+    2)
+        echo Skip
+        exit 125
+        ;;
+    3)
+        echo Abort
+        exit 128
+        ;;
+    x)
+        ;;
+    *)
+        echo "Unrecognized option '$choice'"
+        ;;
+    esac
+done
