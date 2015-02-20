@@ -51,7 +51,7 @@ CXX=${CXX:-c++}
 # -O1 -g -gdwarf-4 -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
 _default_flags=\ -fsanitize=address
 _default_flags+=\ -fsanitize=undefined
-_default_flags+=\ -fdiagnostics-color=auto
+_default_flags+=\ -fdiagnostics-color
 CFLAGS="${CFLAGS-$_default_flags}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
 # Default to use the same CXXFLAGS as CFLAGS (common case)
 CXXFLAGS="${CXXFLAGS-$CFLAGS}"
