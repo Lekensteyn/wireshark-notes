@@ -92,6 +92,7 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
     CC=$CC CXX=$CXX \
     PKG_CONFIG_LIBDIR=$LIBDIR/pkgconfig \
     cmake \
+        -GNinja \
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
         -DENABLE_GTK3=1 \
         -DENABLE_PORTAUDIO=1 \
@@ -110,7 +111,7 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DCMAKE_CXX_FLAGS=$(printf %q "$CXXFLAGS") \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=1
 fi &&
-time make -C $builddir -j\$((\$(nproc)*2))
+time ninja -C $builddir
 '"
 
 

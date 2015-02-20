@@ -191,3 +191,11 @@ This solves this error:
 
 # Find all headers mentioning "fmt" or "fmt" pointers, but without attribute
 grep --exclude=\*.c -Hnr -e '\* *\(fmt\|format\) *\([,)]\|$\)' -C2 --color=always | awk '{s=s $0"\n"}/^[0-9m\[K\x1b]*--/{ if(!att){print s} att=0;s="" } /GNUC_PRINTF/{ att=1 }'
+
+Compile benchmarks on i7-3770 (clean builddir, sources in tmpfs) using
+v1.99.3rc0-233-gbccb7f7 (3 trials)
+                total           cmake           make/ninja      make/ninja(2nd)
+Makefile -j8    154.6s+/-.084s  21.86s+/-.082s  132.7s+/-.039s  2.01s+/-.021s
+Makefile -j10   153.1s+/-.163s  21.81s+/-.198s  131.3s+/-.323s  2.07s+/-.096s
+Makefile -j16   153.9s+/-.366s  21.89s+/-.102s  132.0s+/-.334s  2.02s+/-.011s
+Ninja (-j10)    141.0s+/-.261s  19.90s+/-.214s  121.0s+/-.073s  .366s+/-.012s
