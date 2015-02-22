@@ -70,4 +70,5 @@ fi
 "$WIRESHARK" -r "$CAPTFILE" \
 	-o http.ssl.port:443,4430-4433 \
 	-o ssl.keylog_file:"$SSLKEYLOGFILE" \
+	-o dtls.keylog_file:"$SSLKEYLOGFILE" \
 	"$@"
