@@ -32,6 +32,7 @@ localsrcdir=$HOME/projects/wireshark/
 # Host wireshark-builder
 #    User foo
 #    Hostname 10.42.0.1
+# use 'localhost' for local builds without using rsync/ssh
 remotehost=${1:-wireshark-builder}
 # Remote source dir, it can be volatile (tmpfs) since it is just a copy. On the
 # local side, it is recommended to create a symlink to the localsrcdir for
@@ -52,7 +53,7 @@ CXX=${CXX:-c++}
 _default_flags=\ -fsanitize=address
 _default_flags+=\ -fsanitize=undefined
 _default_flags+=\ -fdiagnostics-color
-CFLAGS="${CFLAGS-$_default_flags}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
+CFLAGS="${CFLAGS-$_default_flags -fno-common}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
 # Default to use the same CXXFLAGS as CFLAGS (common case)
 CXXFLAGS="${CXXFLAGS-$CFLAGS}"
 
@@ -104,7 +105,8 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DENABLE_GNUTLS=1 \
         -DENABLE_GCRYPT=1 \
         -DCMAKE_BUILD_TYPE=Debug \
-        -DENABLE_EXTRA_COMPILER_WARNINGS=1 \
+        -DDISABLE_WERROR=1 \
+        -DENABLE_EXTRA_COMPILER_WARNINGS=0 \
         $remotesrcdir \
         -DCMAKE_LIBRARY_PATH=$LIBDIR \
         -DCMAKE_C_FLAGS=$(printf %q "$CFLAGS") \
@@ -153,20 +155,25 @@ while inotifywait -qq -e close_write "$sync"; do
     # Wait for a second in case I save something and want to do a ninja edit.
     sleep 1
 
-    # IMPORTANT: do not sync top-level config.h or it will break OOT builds
-    rsync -av --delete --exclude='.*.sw?' \
-        --exclude=/config.h \
-        --exclude=/compile_commands.json \
-        --exclude=\*.tar\* \
-        "$localsrcdir/" "$remotehost:$remotesrcdir/" &&
-    ssh -t "$remotehost" "$remotecmd"
+    if [[ $remotehost == localhost ]]; then
+        # Do not bother copying files for local builds
+        sh -c "$remotecmd"
+    else
+        # IMPORTANT: do not sync top-level config.h or it will break OOT builds
+        rsync -av --delete --exclude='.*.sw?' \
+            --exclude=/config.h \
+            --exclude=/compile_commands.json \
+            --exclude=\*.tar\* \
+            "$localsrcdir/" "$remotehost:$remotesrcdir/" &&
+        ssh -t "$remotehost" "$remotecmd"
+    fi
     retval=$?
     if [ $retval -ne 0 ]; then
         notify-send -- "$(tty) - $(date -R)" "Build broke with $retval"
         sleep 2
     else
         mkdir -p "$rundir"
-        [ -n "${NOCOPY:-}" ] ||
+        [[ $remotehost == localhost ]] || [ -n "${NOCOPY:-}" ] ||
         rsync -av --delete \
             --exclude='.*.sw?' \
             --exclude='*.a' \
