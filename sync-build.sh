@@ -23,6 +23,7 @@
 #   * NOCOPY=1  - do not sync the generated binaries back
 #   * B32=1     - build 32-bit (using /usr/lib32)
 #   * force_cmake - Set to non-empty to run cmake before make.
+#   * NOTRIGGER=1 - Do not immediately start building on execution
 
 # LOCAL source dir (on non-volatile storage for reliability)
 localsrcdir=$HOME/projects/wireshark/
@@ -148,6 +149,10 @@ if [ ! -e "${remotesrcdir%%/}" ]; then
 fi
 
 monitor_changes & monpid=$!
+
+if [ -z "${NOTRIGGER:-}" ]; then
+    sleep .5 && touch "$sync" &
+fi
 
 echo Waiting...
 while inotifywait -qq -e close_write "$sync"; do
