@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Invokes the given command, displaying the pre-master secrets to stderr
 # (or to the file given by envvar SSLKEYLOGFILE).
 #
@@ -15,8 +15,10 @@ gdb() {
         "$@"
 }
 
-export LD_PRELOAD=$(dirname "$0")/libsslkeylog.so
-export SSLKEYLOGFILE=${SSLKEYLOGFILE:-/dev/stderr}
+LD_PRELOAD=$(readlink -f "${BASH_SOURCE[0]%/*}")/libsslkeylog.so
+SSLKEYLOGFILE=${SSLKEYLOGFILE:-/dev/stderr}
+export LD_PRELOAD SSLKEYLOGFILE
 
-# Run the command
+# Run the command (if not sourced)
+[[ ${BASH_SOURCE[0]} != $0 ]] || \
 "$@"
