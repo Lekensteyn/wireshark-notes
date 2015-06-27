@@ -1,0 +1,54 @@
+
+grep -rnw register_init_routine | grep -P 'register_init_routine *\( *&?\K[a-z0-9_]+(?= *\))' -o
+
+grep -P 'register_init_routine *\( *&?\K[a-z0-9_]+(?= *\))' -oHr
+
+# Read files and format in a standard way
+time while IFS=: read filename func; do out=/tmp/out/$filename;
+    mkdir -p "${out%/*}" && clang-format "$filename" >"$out"; done < /tmp/1
+# definition is in different file
+clang-format plugins/mate/mate_runtime.c > /tmp/out/plugins/mate/packet-mate.c
+# change initialize_mate_runtime from extern to static
+clang-format epan/dissectors/packet-ncp2222.inc > /tmp/out/tools/ncp2222.py
+
+# Extract all functions
+while IFS=: read filename func; do out=/tmp/fns/$filename; mkdir -p "${out%/*}" && awk "/^(static )?void $func\\(/&&! /;$/{p=1;if(/}$/){print;exit}};p;p&&/^}/{exit}" "/tmp/out/$filename" > "$out"; done < /tmp/1
+
+Do not forget to regenerate:
+--- asn1/camel/packet-camel-template.c  2015-06-23 22:58:45.547098846 +0200
++++ -   2015-06-23 23:40:03.580116775 +0200
+@@ -504,7 +504,7 @@
+  * Routine called when the TAP is initialized.
+  * so hash table are (re)created
+  */
+-void camelsrt_init_routine(void)
++static void camelsrt_init_routine(void)
+ {
+ 
+     /* free hash-table for SRT */
+
+TODO lua only has init, needs free?
+wslua_init_routine
+
+TODO rtp uses wmem_register_callback() to clean memory... move this to cleanup
+func?  rtp_dyn_payloads_init
+
+mp2t dissector leaks at:
+1524     heur_subdissector_list = register_heur_dissector_list("mp2t.pid");
+view -p $(cat /tmp/fns/.x/epan.txt)
+
+# Extract functions from a file given file:funcName
+while IFS=: read filename func; do awk "function f(){print \"/// $func\n\";exit};/\\<$func *\(/&&!/;$/{p=1;print \"//\", FILENAME; if(/}$/){print;f()}};p;p&&/^}/{f()}" $filename; done < /tmp/fns/.x/epan-func.txt
+
+# given a list of files, extract the functions from files
+while read filename; do
+func=$(awk -F: "\"$filename\"~\$1{print \$2;exit}" /tmp/fns/.x/epan-func.txt)
+[ -n "$func" ] || continue
+    awk "function f(){print \"/// $func\n\";exit};/\\<$func *\(/&&!/;$/{p=1;print \"//\", FILENAME; if(/}$/){print;f()}};p;p&&/^}/{f()}" $filename; done
+
+# Test dissectors with cleanup script, run from /tmp/wireshark
+f(){ read x;n=${x:-$n}; f=epan/dissectors/packet-$n.c && [ -f $f ] && ~/projects/wireshark-notes/one-off/cleanup-rewrite.py $f |& colordiff -u $f - | less -R;}
+while :;do f;done
+
+# convert all dissectors with cleanup script
+time for i in $(cat /tmp/fns/.x/epan.txt);do ../wireshark-notes/one-off/cleanup-rewrite.py -w $i 2>/tmp/errs/${i##*/}.txt;done
