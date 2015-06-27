@@ -14,7 +14,7 @@
 # - libnotify for notifications when ready.
 #
 # Usage:
-# $0 [buildhost]
+# $0 [buildhost] [ninja targets]
 # - buildhost defaults to wireshark-builder (you can use user@host)
 # - Optional env vars:
 #   * CC, CXX, CFLAGS, CXXFLAGS - C/C++ compiler binary/flags
@@ -73,6 +73,9 @@ else
     force_cmake=false
 fi
 
+# Drop $remotehost
+shift
+
 # PATH is needed for /usr/bin/core_perl/pod2man (PCAP)
 # ENABLE_QT5=1: install qt5-tools on Arch Linux
 # 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-gtk3 lib32-krb5
@@ -114,7 +117,9 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DCMAKE_CXX_FLAGS=$(printf %q "$CXXFLAGS") \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=1
 fi &&
-time ninja -C $builddir
+time \
+ASAN_OPTIONS=detect_leaks=0 \
+ninja -C $builddir $(printf ' %q' "$@")
 '"
 
 
