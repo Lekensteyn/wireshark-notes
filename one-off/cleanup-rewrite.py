@@ -45,9 +45,15 @@
 import sys, re, logging
 _logger = logging.getLogger(__name__)
 
-# For quick sanity checking (funcName)
+# For quick sanity checking (funcName, is_prototype)
 RE_FUNCTION_HEADER = re.compile(
-        r'(?:static\s+)?void\s+(?P<funcName>\w+)\s*\(\s*void\s*\)')
+        r'''
+        (?:static \s+) ?void    \s+
+        (?P<funcName>\w+)       \s*
+        \(\s*void\s*\)              # "(void)"
+        (?P<is_prototype>\s*;[^\n]*\n)? # Non-empty if this is the prototype,
+                                    # contains the remaining line as well.
+        ''', re.X)
 # TODO: maybe detect prototypes?
 # Matches init/cleanup function signature (funcName, body)
 RE_FUNCTION = re.compile(
@@ -307,6 +313,9 @@ class Source(object):
         # map from function names to a tuple
         # (blockIndex:int, func:Function, func_match:re.Match)
         self.functions = {}
+        # map from prototype function name to a tuple
+        # (blockIndex:int, fn:re.Match)
+        self.prototypes = {}
 
     def parse_func(self, block, blockIndex):
         """
@@ -315,7 +324,16 @@ class Source(object):
         """
         # Quick sanity check (multiple names may show up as it matches
         # prototypes and other functions with any number of parameters).
-        funcNames_guessed = RE_FUNCTION_HEADER.findall(block)
+        funcNames_guessed = []
+        for fn in RE_FUNCTION_HEADER.finditer(block):
+            funcName = fn.group('funcName')
+            funcNames_guessed.append(funcName)
+            if fn.group('is_prototype'):
+                if funcName in self.prototypes:
+                    _logger.error('Prototype %s is already known, overwriting!',
+                            funcName)
+                self.prototypes[funcName] = (blockIndex, fn)
+
         if not funcNames_guessed:
             return
         _logger.debug('Found functions %s', ', '.join(funcNames_guessed))
@@ -423,9 +441,25 @@ class Source(object):
         if not cleanupCode:
             return False # Empty function
 
+        # Add prototypes if necessary
+        if funcName in self.prototypes:
+            self.fix_cleanup_proto(funcName, cleanupFuncName)
+
         self.blocks[blockIndex] = initCode
         self.blocks[blockIndex] += '\n' + cleanupCode
         return True
+
+    def fix_cleanup_proto(self, funcName, cleanupFuncName):
+        protoBlockIndex, fn = self.prototypes[funcName]
+        begin,   end   = fn.span()
+        f_begin, f_end = fn.span('funcName')
+        context = fn.string
+        block = context[0:end]          # up until "proto_init(void);\n"
+        block += context[begin:f_begin] # "static void "
+        block += cleanupFuncName        # "proto_cleanup"
+        block += '(void);\n'            # "(void);\n"
+        block += context[end:]          # remaining code
+        self.blocks[protoBlockIndex] = block
 
     def __str__(self):
         return ''.join(self.blocks)
