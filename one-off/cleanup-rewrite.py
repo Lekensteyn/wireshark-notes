@@ -48,6 +48,10 @@ _logger = logging.getLogger(__name__)
 # Set to True to allow more code to be modified.
 # Unknown lines will be suffixed with a " // FIXME" comment.
 AUDIT = False
+# Set to True to emit code even if no cleanup function exists. This might be
+# helpful if you have dissectors with unrecognized non-trivial initialization
+# code.
+ALWAYS_EMIT_CLEANUP_CODE = False
 
 # For quick sanity checking (funcName, is_prototype)
 RE_FUNCTION_HEADER = re.compile(
@@ -319,7 +323,10 @@ class Function(object):
     def make_cleanup_function(self, cleanupFuncName):
         body = self._make_cleanup_function_body()
         if not body:
-            return
+            if ALWAYS_EMIT_CLEANUP_CODE:
+                _logger.warn('Forcing cleanup function for %s', cleanupFuncName)
+            else:
+                return
         code = self._make_function(cleanupFuncName, body)
         _logger.debug('Emitting cleanup routine %s:\n%s', cleanupFuncName, code)
         return code
@@ -446,12 +453,13 @@ class Source(object):
         if not caller_match:
             # Sanity check
             if re.search(r'register_init_routine\s*\(', block):
-                _logger.error('Could not detect register_init_routine properly!')
+                _logger.warn('Could not detect register_init_routine properly!')
             return False # Continue searching
 
         # Locate init function and generate matching cleanup function
         funcName = caller_match.group('name')
         cleanupFuncName = self.make_cleanup_name(funcName)
+        _logger.info('Trying to fix cleanup function %s', cleanupFuncName)
         if not self.fix_cleanup_function(funcName, cleanupFuncName):
             return
 
@@ -480,6 +488,7 @@ class Source(object):
         initCode = func.make_init_function()
         cleanupCode = func.make_cleanup_function(cleanupFuncName)
         if not cleanupCode:
+            _logger.debug('No cleanup code for function %s', cleanupFuncName)
             return False # Empty function
 
         # Add prototypes if necessary
@@ -487,7 +496,8 @@ class Source(object):
             self.fix_cleanup_proto(funcName, cleanupFuncName)
 
         self.blocks[blockIndex] = initCode
-        self.blocks[blockIndex] += '\n' + cleanupCode
+        if cleanupCode:
+            self.blocks[blockIndex] += '\n' + cleanupCode
         return True
 
     def fix_cleanup_proto(self, funcName, cleanupFuncName):
