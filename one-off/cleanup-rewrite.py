@@ -45,6 +45,10 @@
 import sys, re, logging
 _logger = logging.getLogger(__name__)
 
+# Set to True to allow more code to be modified.
+# Unknown lines will be suffixed with a " // FIXME" comment.
+AUDIT = False
+
 # For quick sanity checking (funcName, is_prototype)
 RE_FUNCTION_HEADER = re.compile(
         r'''
@@ -175,7 +179,10 @@ class Function(object):
                         handled = True
 
             if not handled:
-                self.unknown_lines += line
+                if AUDIT:
+                    self.lines_keep += line.replace('\n', ' // FIXME\n')
+                else:
+                    self.unknown_lines += line
 
         if self.unknown_lines:
             _logger.error('Unknown lines in %s:\n%s',
