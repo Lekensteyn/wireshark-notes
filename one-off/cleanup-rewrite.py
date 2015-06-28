@@ -169,6 +169,10 @@ class Function(object):
                             #self.ht_names.append(varName)
                         self.lines_keep += line
                         handled = True
+                    else:
+                        # Not sure if init or destruct, mark it to be sure.
+                        self.lines_keep += line.replace('\n', ' // FIXME\n')
+                        handled = True
 
             if not handled:
                 self.unknown_lines += line
