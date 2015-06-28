@@ -82,8 +82,12 @@ RE_IF = re.compile(
 RE_REASS = re.compile('reassembly_table_init\s*\(\s*(?P<name>[^\s,]+)')
 # Matches "g_hash_table_destroy(HT_NAME)"
 RE_HT_DESTROY = re.compile(r'''
-        g_hash_table_destroy\s*\(\s*    # "g_hash_table_destroy("
+        (?:
+            g_hash_table_foreach_remove|
+            g_hash_table_destroy
+        )\s*\(\s*                       # "g_hash_table_destroy("
         (?P<varName>[.\w]+)\s*          # "struct.ht_name"
+        [^)]*                           # params for g_hash_table_foreach_remove
         \)                              # ")"
         ''', re.X)
 RE_ASSIGNMENT = re.compile(r'(?P<varName>[.\w]+)\s*=\s*(?P<value>[^;]*)')
@@ -209,11 +213,11 @@ class Function(object):
         else:
             # Look for if (...) ...;
             line, text = self._read_stmt(line, ';')
+            # Handle newline between "if (...)" and "{"
+            if '{' in text:
+                line, text = self._read_stmt(line, '}')
 
-        # Check for else that is not understood.
-        if re.search('\}\s*else\b', text):
-            self.unknown_lines += line
-            return True # Cannot handle else yet! True to avoid double append
+        has_else = re.search(r'\}\s*else\b', text)
 
         # Get rid of if condition and brackets
         if '{' in text:
@@ -249,6 +253,24 @@ class Function(object):
             _logger.warn('Unhandled if stmt: %s', stmt)
             self.unknown_lines += line
             return True
+
+        # If an else is present, continue searching for more
+        if has_else:
+            line, text = self._read_stmt('', '}')
+            if 'g_hash_table_new' in text:
+                line = line.split('}', 1)[0]
+                indent = self.get_indent()
+                line = ''.join([l.replace(indent, '', 1)
+                        for l in line.splitlines(True)])
+                text = line
+                _logger.debug('Found hash table in else: %s', text)
+                if varName not in self.ht_names:
+                    _logger.warn('HT %s was not destructed', varName)
+                    #self.ht_names.append(varName)
+                self.lines_keep += line
+            else:
+                # Hmm... no idea what this is.
+                self.unknown_lines += line
 
         return True
 
@@ -400,8 +422,10 @@ class Source(object):
         # Matches " register_init_routine (&foo_init);"
         caller_match = re.search(
                 r'''
-                ^([ \t]*)register_init_routine\s*
-                \(\s* &? \s*(?P<name>\w+)\s* \);\n
+                ^(?P<line>
+                    (?:[ \t]*)register_init_routine\s*
+                    \(\s* &? \s*(?P<name>\w+)\s* \);
+                )[^\n]*\n
                 ''', block, re.M | re.X)
         if not caller_match:
             # Sanity check
@@ -416,9 +440,10 @@ class Source(object):
             return
 
         # Yields " register_cleanup_routine (&foo_cleanup);"
-        extra_line = caller_match.group() \
+        extra_line = caller_match.group('line') \
             .replace('register_init_routine', 'register_cleanup_routine') \
             .replace(funcName, cleanupFuncName)
+        extra_line += '\n'
         begin, end = caller_match.span()
         self.blocks[blockIndex] = block[0:end] + extra_line + block[end:]
         return True # Done searching
