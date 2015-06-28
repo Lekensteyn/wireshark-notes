@@ -121,6 +121,12 @@ class Function(object):
         # Not a comment, not a multi-line comment
         return False, False
 
+    def add_unknown_line(self, line):
+        if AUDIT:
+            self.lines_keep += line.replace('\n', ' // FIXME\n')
+        else:
+            self.unknown_lines += line
+
     def parse(self):
         """Call it once to parse the given function body."""
         multiline_comment = False
@@ -179,14 +185,13 @@ class Function(object):
                         handled = True
 
             if not handled:
-                if AUDIT:
-                    self.lines_keep += line.replace('\n', ' // FIXME\n')
-                else:
-                    self.unknown_lines += line
+                self.add_unknown_line(line)
 
         if self.unknown_lines:
             _logger.error('Unknown lines in %s:\n%s',
                 self.name, self.unknown_lines)
+            if self.lines_keep:
+                _logger.warn('Would keep these lines:\n%s', self.lines_keep)
             return False
         _logger.info('Found function %s', self.name)
         _logger.info('Keep function  %s:\n%s', self.name, self.lines_keep)
@@ -248,7 +253,7 @@ class Function(object):
                 if ht_destroy_match.group('varName') != varName:
                     _logger.error('cond %s != destroy %s' %
                             (varName, ht_destroy_match.group('varName')))
-                    self.unknown_lines += line
+                    self.add_unknown_line(line)
                     return True
                 # Remember name for later destruction
                 self.ht_names.append(varName)
@@ -262,7 +267,7 @@ class Function(object):
                     # Ignore clearing variable for hash table
                     continue
             _logger.warn('Unhandled if stmt: %s', stmt)
-            self.unknown_lines += line
+            self.add_unknown_line(line)
             return True
 
         # If an else is present, continue searching for more
@@ -281,7 +286,7 @@ class Function(object):
                 self.lines_keep += line
             else:
                 # Hmm... no idea what this is.
-                self.unknown_lines += line
+                self.add_unknown_line(line)
 
         return True
 
