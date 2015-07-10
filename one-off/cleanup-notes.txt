@@ -52,3 +52,14 @@ while :;do f;done
 
 # convert all dissectors with cleanup script
 time for i in $(cat /tmp/fns/.x/epan.txt);do ../wireshark-notes/one-off/cleanup-rewrite.py -w $i 2>/tmp/errs/${i##*/}.txt;done
+# same, but based on a previous source
+time for i in $(sort /tmp/fns/.x/epan.txt);do git show HEAD:$i | ../wireshark-notes/one-off/cleanup-rewrite.py -w -:$i 2>/tmp/errs/${i##*/}.txt;done
+
+# Edit all files changed since last version
+vim -p $(git diff --name-status HEAD| awk '{print $NF}')
+
+# Env options for better LSAN traces:
+LSAN_OPTIONS=fast_unwind_on_malloc=0
+WIRESHARK_DEBUG_EP_NO_CHUNKS=1
+WIRESHARK_DEBUG_SE_NO_CHUNKS=1
+G_SLICE=always-malloc
