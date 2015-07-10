@@ -171,6 +171,7 @@ while inotifywait -qq -e close_write "$sync"; do
     else
         # IMPORTANT: do not sync top-level config.h or it will break OOT builds
         rsync -av --delete --exclude='.*.sw?' \
+            -z \
             --exclude=/config.h \
             --exclude=/compile_commands.json \
             --exclude=\*.tar\* \
@@ -185,6 +186,7 @@ while inotifywait -qq -e close_write "$sync"; do
         mkdir -p "$rundir"
         [[ $remotehost == localhost ]] || [ -n "${NOCOPY:-}" ] ||
         rsync -av --delete \
+            -z \
             --exclude='.*.sw?' \
             --exclude='*.a' \
             "$remotehost:$rundir" "$rundir"
