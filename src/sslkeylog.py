@@ -24,7 +24,14 @@ the following in your ~/.gdbinit:
     sys.path.insert(0, os.path.expanduser('~/.gdb'))
     import sslkeylog as skl
     # Override default keylog (SSLKEYLOGFILE env or stderr)
-    skl.keylog_filename = '/tmp/premaster.txt'
+    #skl.keylog_filename = '/tmp/premaster.txt'
+    end
+
+    define skl-batch
+    dont-repeat
+    handle all noprint pass
+    handle SIGINT noprint pass
+    py skl.start()
     end
 
 Then you can simply execute:
@@ -32,6 +39,14 @@ Then you can simply execute:
     gdb -q -ex 'py skl.start()' -p `pidof curl`
 
 To stop capturing keys, detach GDB or invoke 'skl.stop()'
+
+If you are not interested in debugging the program, and only want to
+extract keys, use the skl-batch command defined in gdbinit:
+
+    SSLKEYLOGFILE=premaster.txt gdb -batch -ex skl-batch -p `pidof curl`
+
+To stop capturing keys early, send SIGTERM to gdb. (Note that SIGTRAP is
+used internally for breakpoints and should not be ignored.)
 '''
 
 import gdb
