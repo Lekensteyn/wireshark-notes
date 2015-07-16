@@ -155,7 +155,7 @@ class Keylog(object):
             else:
                 raise
         if needs_header(f):
-            f.write(_SSL_KEYLOG_HEADER)
+            f.write(_SSL_KEYLOG_HEADER.encode('ascii'))
         return cls(f)
 
 # A shared Keylog instance.
