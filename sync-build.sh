@@ -40,11 +40,8 @@ remotehost=${1:-wireshark-builder}
 # debugging purposes
 remotesrcdir=/tmp/wireshark/
 # Remote directory to generate objects, it must also be accessible locally for
-# easier debugging (rpath)
+# easier debugging (can move it as needed).
 builddir=/tmp/wsbuild/
-
-# LOCAL & REMOTE program dir (Available since 1.11.x and 1.12.0)
-rundir="$builddir/run/"
 
 CC=${CC:-cc}
 CXX=${CXX:-c++}
@@ -66,6 +63,12 @@ if [[ ${B32:-} ]]; then
     CXXFLAGS="$CXXFLAGS -m32"
 fi
 
+# Override RPATH to allow for relocatable executables.
+# As extcap/androiddump is located in a subdir, add a special case for that.
+# This is NOT suitable (safe) for release! If you ever move the "run" directory,
+# be sure not to have an untrusted "extcap" directory next to it.
+RPATH='$ORIGIN:$ORIGIN/../extcap/..'
+
 # Set envvar force_cmake=1 to call cmake before every build
 if [ -n "${force_cmake:-}" ]; then
     force_cmake=true
@@ -77,7 +80,7 @@ fi
 shift
 
 # PATH is needed for /usr/bin/core_perl/pod2man (PCAP)
-# ENABLE_QT5=1: install qt5-tools on Arch Linux
+# ENABLE_QT5=1: install qt5-tools qt5-multimedia on Arch Linux
 # 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-gtk3 lib32-krb5
 # lib32-portaudio  lib32-geoip lib32-libnl lib32-lua
 remotecmd="mysh() {
@@ -99,6 +102,8 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
     cmake \
         -GNinja \
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=1 \
+        -DCMAKE_INSTALL_RPATH=$(printf %q "$RPATH") \
         -DENABLE_GTK3=1 \
         -DENABLE_PORTAUDIO=1 \
         -DENABLE_QT5=1 \
@@ -108,6 +113,7 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DENABLE_SMI=0 \
         -DENABLE_GNUTLS=1 \
         -DENABLE_GCRYPT=1 \
+        -DENABLE_LUA=1 \
         -DCMAKE_BUILD_TYPE=Debug \
         -DDISABLE_WERROR=1 \
         -DENABLE_EXTRA_COMPILER_WARNINGS=0 \
@@ -152,6 +158,8 @@ monitor_changes() {
 if [ ! -e "${remotesrcdir%%/}" ]; then
     ln -sv "$localsrcdir" "${remotesrcdir%%/}"
 fi
+# In case /tmp/wireshark/ exists but is different.
+localsrcdir=$remotesrcdir
 
 monitor_changes & monpid=$!
 
@@ -170,7 +178,7 @@ while inotifywait -qq -e close_write "$sync"; do
         sh -c "$remotecmd"
     else
         # IMPORTANT: do not sync top-level config.h or it will break OOT builds
-        rsync -av --delete --exclude='.*.sw?' \
+        rsync -avi --delete --exclude='.*.sw?' \
             -z \
             --exclude=/config.h \
             --exclude=/compile_commands.json \
@@ -183,13 +191,15 @@ while inotifywait -qq -e close_write "$sync"; do
         notify-send -- "$(tty) - $(date -R)" "Build broke with $retval"
         sleep 2
     else
-        mkdir -p "$rundir"
+        mkdir -p "$builddir"
         [[ $remotehost == localhost ]] || [ -n "${NOCOPY:-}" ] ||
-        rsync -av --delete \
+        rsync -avi --delete \
             -z \
             --exclude='.*.sw?' \
             --exclude='*.a' \
-            "$remotehost:$rundir" "$rundir"
+            "$remotehost:$builddir/"{compile_commands.json,config.h} \
+            "$remotehost:$builddir/run" \
+            "$builddir/"
         notify-send -- "$(tty) - $(date -R)" "READY"
     fi
     echo Another satisfied customer. NEXT
