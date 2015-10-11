@@ -93,7 +93,7 @@ xargs -rt -P$(nproc) -n10 clang-query "${args[@]}"
 rm "$tmp"
 cat <<'EOF'
 # Use this for analysis:
-awk '/"[r]oot" binds here/{i=3} !/clang-query/&&i>0{print;i--}' scan.log | less -R
+awk '/"[r]oot" binds here/{i=3} !/clang-query/&&i>0{printf("%s\033[m\n", $0);i--}' scan.log | less -r
 EOF
 
 # vim: set sw=4 ts=4 et:
