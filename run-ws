@@ -57,7 +57,7 @@ if [ -z "$ASAN_OPTIONS" ]; then
 	# Abort so it can be caught by gdb
 	ASAN_OPTIONS=abort_on_error=1
 	# Strip source path (assume /tmp/wireshark/)
-	ASAN_OPTIONS+=strip_path_prefix=/tmp/wireshark/
+	ASAN_OPTIONS+=:strip_path_prefix=/tmp/wireshark/
 	export ASAN_OPTIONS
 fi
 
