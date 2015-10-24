@@ -1,6 +1,14 @@
 #!/bin/bash
 # Searches for functions adding expert items which are located in a if(tree)
 # guard. Tested using clang-query 3.7.0 (part of clang-tools-extra).
+#
+# Usage:
+#
+#   Ensure that builddir and srcdir variables below are set
+#   Ensure that compile_commands.json exists in builddir (see below).
+#   Run `./find-expert-in-tree > scan.log` to write matching contexts to file
+#   Use the displayed awk command for further processing (see bottom).
+#
 # Author: Peter Wu <peter@lekensteyn.nl>
 
 # path to builddir (should contain compile_commands.json, use
@@ -91,7 +99,8 @@ xargs -rt -P$(nproc) -n10 clang-query "${args[@]}"
 # -n limits files per command. Use this to tune memory usage.
 
 rm "$tmp"
-cat <<'EOF'
+cat <<'EOF' >&2
+
 # Use this for analysis:
 awk '/"[r]oot" binds here/{i=3} !/clang-query/&&i>0{printf("%s\033[m\n", $0);i--}' scan.log | less -r
 EOF
