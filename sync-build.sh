@@ -14,7 +14,7 @@
 # - libnotify for notifications when ready.
 #
 # Usage:
-# $0 [buildhost] [ninja targets]
+# $0 [buildhost] [cmake options --] [ninja options]
 # - buildhost defaults to wireshark-builder (you can use user@host)
 # - Optional env vars:
 #   * CC, CXX, CFLAGS, CXXFLAGS - C/C++ compiler binary/flags
@@ -24,6 +24,7 @@
 #   * B32=1     - build 32-bit (using /usr/lib32)
 #   * force_cmake - Set to non-empty to run cmake before make.
 #   * NOTRIGGER=1 - Do not immediately start building on execution
+#   * BUILDDIR  - absolute path on remote and local side for built objects.
 
 # LOCAL source dir (on non-volatile storage for reliability)
 localsrcdir=$HOME/projects/wireshark/
@@ -41,7 +42,7 @@ remotehost=${1:-wireshark-builder}
 remotesrcdir=/tmp/wireshark/
 # Remote directory to generate objects, it must also be accessible locally for
 # easier debugging (can move it as needed).
-builddir=/tmp/wsbuild/
+builddir=${BUILDDIR:-/tmp/wsbuild/}
 
 CC=${CC:-cc}
 CXX=${CXX:-c++}
@@ -51,6 +52,9 @@ CXX=${CXX:-c++}
 _default_flags=\ -fsanitize=address
 _default_flags+=\ -fsanitize=undefined
 _default_flags+=\ -fdiagnostics-color
+# Supported in GCC since 2007 (?), but only in Clang 3.8
+#_default_flags+=" -fdebug-prefix-map=$builddir="
+#_default_flags+=" -fdebug-prefix-map=$remotesrcdir="
 CFLAGS="${CFLAGS-$_default_flags -fno-common}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
 # Default to use the same CXXFLAGS as CFLAGS (common case)
 CXXFLAGS="${CXXFLAGS-$CFLAGS}"
@@ -79,8 +83,22 @@ fi
 # Drop $remotehost
 shift
 
+cmake_options=()
+ninja_options=()
+while [ $# -gt 0 ]; do
+    if [[ $1 == -- ]]; then
+        cmake_options=("${ninja_options[@]}")
+        shift
+        ninja_options=("$@")
+        break
+    fi
+    ninja_options+=("$1")
+    shift
+done
+
 # PATH is needed for /usr/bin/core_perl/pod2man (PCAP)
 # ENABLE_QT5=1: install qt5-tools qt5-multimedia on Arch Linux
+# BUILD_sshdump=1: install libssh on Arch Linux
 # 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-gtk3 lib32-krb5
 # lib32-portaudio  lib32-geoip lib32-libnl lib32-lua
 remotecmd="mysh() {
@@ -121,11 +139,12 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DCMAKE_LIBRARY_PATH=$LIBDIR \
         -DCMAKE_C_FLAGS=$(printf %q "$CFLAGS") \
         -DCMAKE_CXX_FLAGS=$(printf %q "$CXXFLAGS") \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=1
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
+        $(printf ' %q' "${cmake_options[@]}")
 fi &&
 time \
 ASAN_OPTIONS=detect_leaks=0 \
-ninja -C $builddir $(printf ' %q' "$@")
+ninja -C $builddir $(printf ' %q' "${ninja_options[@]}")
 '"
 
 
