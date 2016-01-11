@@ -155,6 +155,10 @@ openssl req -new -key dsa.pem -x509 -days 3650 -out dsa.crt -subj "/CN=*.local.a
 openssl ecparam -name prime192v1 -out ec.pem -genkey
 openssl req -new -key ec.pem -x509 -days 3650 -out ec.crt -subj "/CN=*.local.al.lekensteyn.nl/OU=EC"
 
+# Test session resumption
+tshark -i veth0 -p -w ssl-session-id.pcapng -P -f tcp
+openssl s_server -www -key server.key -msg -cipher DHE-RSA-AES128-SHA256
+curl -kvv --ciphers DHE-RSA-AES128-SHA256 https://10.9.0.1/{,}
 
 http://wiki.wireshark.org/SampleCaptures?action=AttachFile
 // Find all extensions
@@ -199,3 +203,8 @@ Makefile -j8    154.6s+/-.084s  21.86s+/-.082s  132.7s+/-.039s  2.01s+/-.021s
 Makefile -j10   153.1s+/-.163s  21.81s+/-.198s  131.3s+/-.323s  2.07s+/-.096s
 Makefile -j16   153.9s+/-.366s  21.89s+/-.102s  132.0s+/-.334s  2.02s+/-.011s
 Ninja (-j10)    141.0s+/-.261s  19.90s+/-.214s  121.0s+/-.073s  .366s+/-.012s
+
+# CCC_CC and CCC_CXX prevent fallback to gcc.
+export CCC_CC=clang CCC_CXX=clang++
+cmake -GNinja -DCMAKE_C_COMPILER=/usr/lib/clang-analyzer/scan-build/ccc-analyzer -DCMAKE_CXX_COMPILER=/usr/lib/clang-analyzer/scan-build/c++-analyzer /tmp/wireshark/ -DCMAKE_BUILD_TYPE=Debug -DDISABLE_WERROR=1 -DENABLE_EXTRA_COMPILER_WARNINGS=1 -DCMAKE_EXPORT_COMPILE_COMMANDS=1
+script -c 'time scan-build -o $PWD/scanresults ninja' build.log
