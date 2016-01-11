@@ -1,0 +1,68 @@
+#!/bin/bash
+# Finds all packet-FOO.c having an assignment matching:
+#   FOO_handle = create_dissector_handle(..., ...)
+# Tested using clang-query 3.7.0 (part of clang-tools-extra).
+#
+# Usage:
+#
+#   Ensure that builddir and srcdir variables below are set
+#   Ensure that compile_commands.json exists in builddir (see below).
+#   Run `./fgind-assignments-handle > scan.log` to write matching contexts to file
+#   Use the displayed awk command for further processing (see bottom).
+#
+# Author: Peter Wu <peter@lekensteyn.nl>
+
+# path to builddir (should contain compile_commands.json, use
+# cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1)
+builddir=/tmp/wsbuild
+# path to source directory (will be scanned for files matching the function
+srcdir=/tmp/wireshark
+
+set -e -u
+
+matcher='
+binaryOperator(hasOperatorName("="), hasRHS(callExpr(callee(functionDecl(hasName("create_dissector_handle"))))))
+'
+
+matcher="$(sed '/^ *#/d;s/^ *//;s/ *$//' <<<"$matcher" | tr -d '\n')"
+args=(
+    # Add this if you get an error about missing std headers
+    #-extra-arg=-I/usr/lib/clang/3.7.0/include/
+    -p "$builddir"
+
+    # Use "print" to show the full processed line. Use "diag" for a short line.
+    # Use "dump" for a raw AST tree.
+    -c "set output print"
+    #-c "set output dump"
+    #-c "set output diag"
+
+    -c "match ${matcher}"
+)
+
+# Write file names matching the function names to a file (cache it in case this
+# script is interrupted).
+tmp=/tmp/files.txt
+[ -s "$tmp" ] ||
+grep -rl --exclude=\* --include=\*.c --exclude-dir=asn1 "$srcdir" \
+    -e 'create_dissector_handle' > "$tmp"
+
+# Start the hunt!
+cat "$tmp" |
+#head | grep ssl|
+xargs -rt -P$(nproc) -n10 clang-query "${args[@]}"
+# add -t to xargs for verbose debugging (print commands as they are executed)
+# -P is used for parallel jobs
+# -n limits files per command. Use this to tune memory usage.
+
+rm "$tmp"
+cat <<'EOF' >&2
+
+# Use this for analysis:
+awk '/"[r]oot" binds here/{i=2} !/clang-query/&&i>0{printf("%s\033[m\n", $0);i--}' /tmp/results.txt |
+gawk -F'[:=]' 'f{v=$1; gsub(" ","",v); if(sub(/_handle$/,"",v)==0)f="";
+dis=gensub(/.*\/packet-(.+)[.]c$/,"\\1","g",f);gsub("-","",dis); gsub("_","",v);
+if(dis==v)print f":"l;f=""} /packet-.*"root"/{f=$1;l=$2}' |
+sed 's,/tmp/wireshark/,,'
+EOF
+
+# vim: set sw=4 ts=4 et:
