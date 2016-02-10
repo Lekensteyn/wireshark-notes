@@ -36,7 +36,7 @@ parser.add_argument("--ciphers",
 parser.add_argument("pcap_file", help="Pcap file with single TCP stream")
 parser.add_argument("pcap_srvport", type=int, help="Server port in pcap")
 
-def get_server_sock(q, c, key, cert):
+def get_server_sock(q, c, key, cert, ciphers):
     c.acquire()
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -52,7 +52,7 @@ def get_server_sock(q, c, key, cert):
     try:
         conn, addr = sock.accept()
         print("Client: %r" % (addr,))
-        conn = ssl.wrap_socket(conn, key, cert, True)
+        conn = ssl.wrap_socket(conn, key, cert, True, ciphers=ciphers)
         q.put(conn)
     except:
         q.put(None)
@@ -77,7 +77,7 @@ def main():
     client_queue = Queue()
     cond = Condition()
     server_thread = Thread(target=get_server_sock, name='Server',
-            args=(server_queue, cond, args.key, args.cert))
+            args=(server_queue, cond, args.key, args.cert, args.ciphers))
     client_thread = Thread(target=get_client_sock, name='Client',
             args=(client_queue, args.ciphers))
     cond.acquire()
