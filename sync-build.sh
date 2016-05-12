@@ -52,6 +52,7 @@ CXX=${CXX:-c++}
 _default_flags=\ -fsanitize=address
 _default_flags+=\ -fsanitize=undefined
 _default_flags+=\ -fdiagnostics-color
+_default_flags+=\ -fuse-ld=gold
 # Supported in GCC since 2007 (?), but only in Clang 3.8
 #_default_flags+=" -fdebug-prefix-map=$builddir="
 #_default_flags+=" -fdebug-prefix-map=$remotesrcdir="
@@ -116,7 +117,7 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
     set -x &&
     time \
     CC=$CC CXX=$CXX \
-    PKG_CONFIG_LIBDIR=$LIBDIR/pkgconfig \
+    PKG_CONFIG_LIBDIR=$LIBDIR/pkgconfig:/usr/share/pkgconfig \
     cmake \
         -GNinja \
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
