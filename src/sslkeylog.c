@@ -39,7 +39,8 @@ static inline void put_hex(char *buffer, int pos, char c)
     buffer[pos+1] = c2 < 10 ? '0' + c2 : 'A' + c2 - 10;
 }
 
-static void dump_to_fd(SSL *ssl, int fd)
+static void dump_to_fd(int fd, unsigned char *client_random,
+        unsigned char *master_key, int master_key_length)
 {
     int pos, i;
     char line[PREFIX_LEN + 2 * SSL3_RANDOM_SIZE + 1 +
@@ -49,13 +50,13 @@ static void dump_to_fd(SSL *ssl, int fd)
     pos = PREFIX_LEN;
     /* Client Random for SSLv3/TLS */
     for (i = 0; i < SSL3_RANDOM_SIZE; i++) {
-        put_hex(line, pos, ssl->s3->client_random[i]);
+        put_hex(line, pos, client_random[i]);
         pos += 2;
     }
     line[pos++] = ' ';
     /* Master Secret (size is at most SSL_MAX_MASTER_KEY_LENGTH) */
-    for (i = 0; i < ssl->session->master_key_length; i++) {
-        put_hex(line, pos, ssl->session->master_key[i]);
+    for (i = 0; i < master_key_length; i++) {
+        put_hex(line, pos, master_key[i]);
         pos += 2;
     }
     line[pos++] = '\n';
@@ -86,13 +87,22 @@ typedef struct ssl_tap_state {
 } ssl_tap_state_t;
 
 /* Copies SSL state for later comparison in tap_ssl_key. */
-static void ssl_tap_state_init(ssl_tap_state_t *state, SSL *ssl)
+static void ssl_tap_state_init(ssl_tap_state_t *state, const SSL *ssl)
 {
+    const SSL_SESSION *session = SSL_get_session(ssl);
+
     memset(state, 0, sizeof(ssl_tap_state_t));
-    if (ssl->session && ssl->session->master_key_length > 0) {
-        state->master_key_length = ssl->session->master_key_length;
-        memcpy(state->master_key, ssl->session->master_key,
-                ssl->session->master_key_length);
+    if (session) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        state->master_key_length = SSL_SESSION_get_master_key(session,
+                state->master_key, SSL_MAX_MASTER_KEY_LENGTH);
+#else
+        if (session->master_key_length > 0) {
+            state->master_key_length = session->master_key_length;
+            memcpy(state->master_key, session->master_key,
+                    session->master_key_length);
+        }
+#endif
     }
 }
 
@@ -100,22 +110,42 @@ static void ssl_tap_state_init(ssl_tap_state_t *state, SSL *ssl)
     ssl_tap_state_t state; \
     ssl_tap_state_init(&state, ssl)
 
-static void tap_ssl_key(SSL *ssl, ssl_tap_state_t *state)
+static void tap_ssl_key(const SSL *ssl, ssl_tap_state_t *state)
 {
-    /* SSLv2 is not supported (Wireshark does not support it either). Write the
-     * logfile when the master key is available for SSLv3/TLSv1. */
-    if (ssl->s3 != NULL &&
-        ssl->session != NULL && ssl->session->master_key_length > 0) {
+    const SSL_SESSION *session = SSL_get_session(ssl);
+    unsigned char client_random[SSL3_RANDOM_SIZE];
+    unsigned char master_key[SSL_MAX_MASTER_KEY_LENGTH];
+    int master_key_length = 0;
+
+    if (session) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        /* ssl->s3 is not checked in openssl 1.1.0-pre6, but let's assume that
+         * we have a valid SSL context if we have a non-NULL session. */
+        SSL_get_client_random(ssl, client_random, SSL3_RANDOM_SIZE);
+        master_key_length = SSL_SESSION_get_master_key(session, master_key,
+                SSL_MAX_MASTER_KEY_LENGTH);
+#else
+        if (ssl->s3 && session->master_key_length > 0) {
+            memcpy(client_random, ssl->s3->client_random, SSL3_RANDOM_SIZE);
+
+            master_key_length = session->master_key_length;
+            memcpy(master_key, session->master_key, master_key_length);
+        }
+#endif
+    }
+
+    /* Write the logfile when the master key is available for SSLv3/TLSv1. */
+    if (master_key_length > 0) {
         /* Skip writing keys if it did not change. */
-        if (state->master_key_length == ssl->session->master_key_length &&
-            memcmp(state->master_key, ssl->session->master_key,
-                    state->master_key_length) == 0) {
+        if (state->master_key_length == master_key_length &&
+            memcmp(state->master_key, master_key, master_key_length) == 0) {
             return;
         }
 
         init_keylog_file();
         if (keylog_file_fd >= 0) {
-            dump_to_fd(ssl, keylog_file_fd);
+            dump_to_fd(keylog_file_fd, client_random, master_key,
+                    master_key_length);
         }
     }
 }
