@@ -61,7 +61,7 @@ gen_pk() {
         openssl genrsa -out "$keyfile"
         ;;
     DSS)
-        openssl dsaparam 1024 | openssl gendsa /dev/stdin -out "$keyfile"
+        openssl dsaparam 1024 | openssl gendsa -out "$keyfile" /dev/stdin
         ;;
     ECDSA)
         openssl ecparam -name secp384r1 -out "$keyfile" -genkey
@@ -99,8 +99,8 @@ start_server() {
     ECDH)
         crtfile=$ecc_pub
         keyfile=$ecc_prv
-        ca_key=$pkdir$rsa_prv
-        ca_crt=$pkdir$rsa_pub
+        ca_key=$rsa_prv
+        ca_crt=$rsa_pub
         port=$((portbase+2))
         ;;
     DSS)
@@ -117,12 +117,12 @@ start_server() {
     if [ ! -e "$pkdir$crtfile" ]; then
         gen_pk "$auth" \
             "$pkdir$keyfile" "$pkdir$crtfile" \
-            "$ca_key" "$ca_crt" || return 1
+            "$pkdirca_key" "$pkdir$ca_crt" || return 1
     fi
 
     # Enable insecure ciphers too, this script is for generating all possible
     # test samples supported by openssl.
-    opts+=( -cipher ALL:NULL )
+    opts+=( -cipher ALL:COMPLEMENTOFALL )
 
     openssl s_server -accept $port \
         "${opts[@]}" \
