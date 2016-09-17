@@ -61,6 +61,10 @@ s_client_client_random() {
         fflush();
     }
 
+    # if the cipher is unknown, or the security level is too low (see
+    # SSL_get_security_level in OpenSSL 1.1.0), then this message is reported.
+    /no ciphers available/ { invalid_cipher = 1 }
+
     END {
         for (rnd in queued) {
             print "# No master key for random", rnd
@@ -70,6 +74,8 @@ s_client_client_random() {
         if (!has_random) {
             if (key)
                 print "# No random found for key", key
+            else if (invalid_cipher)
+                print "# Cipher is invalid or its security level is too low"
             else
                 print "# No random nor key found"
         }
@@ -102,7 +108,7 @@ while read cipher; do
         port=$((portbase+2)) ;;
     *-DSS-*)
         port=$((portbase+3)) ;;
-    PSK-*)
+    PSK-*|*-PSK-*)
         opts+=(-psk "$PSK")
         port=$portbase ;;
     *-RSA-*|*) # assume RSA (includes name like RC4-SHA)
