@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+# Capture from a remote server over SSH which has tcpdump but no dumpcap.
+#
+# After copying this file to the extcap folder (see Help -> About
+# for location), you can use the name "ssh-tcpdump:" followed by the interface
+# name:
+#
+#   SSHHOST=peterw@someserver wireshark -i ssh-tcpdump:eth0 -p -k
+#
+# Note: interface names are currently hard-coded (lo and eth0).
+
+#from __future__ import print_function
+
+import argparse, os, sys
+from shlex import quote
+from signal import SIGINT
+
+parser = argparse.ArgumentParser()
+
+# Actions
+parser.add_argument('--extcap-interfaces', action='store_true')
+parser.add_argument('--extcap-dlts', action='store_true')
+parser.add_argument('--extcap-config', action='store_true')
+parser.add_argument('--capture', action='store_true')
+
+parser.add_argument('--extcap-interface', metavar='IFACE')
+
+parser.add_argument('--extcap-capture-filter', metavar='CFILTER')
+parser.add_argument('--fifo', metavar='FIFO')
+
+IFACE_PREFIX = 'ssh-tcpdump:'
+# TODO currently hard-coded interfaces, maybe add preferences?
+ifaces = [
+    'lo',
+    'eth0',
+]
+
+def extcap_interfaces():
+    print("extcap {version=1.0}")
+    for iface in ifaces:
+        print("interface {value=%s%s}{display=Remote tcpdump: %s}" % (
+            IFACE_PREFIX, iface, iface
+        ))
+
+def extcap_dlts(iface):
+    # Required for the interface to show up in the interace
+    print("dlt {number=147}{name=USER0}{display=Remote capture dependent DLT}")
+
+# TODO consider configuration option for setting the SSH host?
+def extcap_config(iface):
+    pass
+
+def redirect_stdout(outfile):
+    STDOUT_FILENO = 1
+    try: os.close(STDOUT_FILENO)
+    except OSError: pass
+    fd = os.open(outfile, os.O_WRONLY, 0o600)
+    # TODO this requires Py 3.4, maybe old version can use dup2
+    os.set_inheritable(fd, True)
+    if fd != STDOUT_FILENO:
+        os.dup2(fd, STDOUT_FILENO)
+        os.close(fd)
+
+def extcap_capture(iface, cfilter, outfile):
+    ssh_host = os.getenv("SSHHOST")
+    if not ssh_host:
+        raise RuntimeError("Missing SSHHOST")
+    ssh_user = os.getenv('SSHUSER')
+    if not ssh_user:
+        if '@' in ssh_host:
+            ssh_user = ssh_host.split('@')[0]
+        else:
+            ssh_user = os.getenv('USER')
+    tcpdump_args = [
+        "sudo",
+        "tcpdump",
+        "-i", iface,
+        "-p",
+        "-U",
+        "-w", "-",
+    ]
+    # Change to a less-privileged user
+    if ssh_user:
+        tcpdump_args += ["-Z", ssh_user]
+    if cfilter:
+        tcpdump_args += [cfilter]
+    args = [
+        "ssh", ssh_host,
+        " ".join(quote(c) for c in tcpdump_args),
+    ]
+    #import subprocess; subprocess.call(["ls", "-l", "/proc/%d/fd/" % os.getpid()], stdout=2)
+    redirect_stdout(outfile)
+    os.execvp(args[0], args)
+
+def main():
+    args = parser.parse_args()
+    if args.extcap_interfaces:
+        return extcap_interfaces()
+
+    if not args.extcap_interface:
+        parser.error('Missing --extcap-interface option')
+
+    iface = args.extcap_interface[len(IFACE_PREFIX):]
+
+    if args.extcap_dlts:
+        return extcap_dlts(iface)
+    elif args.extcap_config:
+        return extcap_config(iface)
+    elif args.capture:
+        if not args.fifo:
+            parser.error('Missing --fifo option for --capture')
+        return extcap_capture(iface, args.extcap_capture_filter, args.fifo)
+    else:
+        parser.error('Missing action')
+        return 1
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(128 + SIGINT)
+    except OSError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
