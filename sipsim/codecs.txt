@@ -17,8 +17,8 @@
 # mod_com_g728
 # G728/8000 15
 
-# mod_com_g729
-# G729/8000 18
+# mod_com_g729 or mod_bcg729
+#G729/8000 18
 
 
 # (mostly) dynamic types
