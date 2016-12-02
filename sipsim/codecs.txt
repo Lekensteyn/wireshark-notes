@@ -1,0 +1,57 @@
+
+# Note: codecname[@8000h|16000h|32000h[@XXi]]
+
+# mod_g723_1 is for passthrough
+# G723/8000 4
+
+# (in core)
+#PCMU/8000 0
+#PCMA/8000 8
+# RFC 3555 valid sample sizes for L16: 8000, 11025, 16000, 22050, 24000, 32000, 44100, and 48000
+# L16 RTP clock rate is always 44100. (pt 10 and 11, but dynamic for others)
+#L16/8000/2
+#L16/16000/2
+#L16/11025
+#L16/48000
+
+# mod_com_g728
+# G728/8000 15
+
+# mod_com_g729
+# G729/8000 18
+
+
+# (mostly) dynamic types
+# mod_ilbc
+#iLBC/8000 # note: a=fmtp:97 mode=20 or mode=30
+
+# mod_siren
+#G7221/16000 # note: a=fmtp:121 bitrate=24000
+#G7221/32000 # note: a=fmtp:122 bitrate=48000
+
+# note, additionally also supported: PCMU/PCMA (G711)
+# mod_spandsp
+#GSM/8000 3
+#DVI4/8000 5
+#DVI4/16000 6
+#LPC/8000 7
+# G722/8000 on wire, but actual sample size is 16kHz
+# G722/8000 9
+#G722/16000
+#G726-16/8000
+#G726-24/8000
+#G726-32/8000
+#G726-40/8000
+#AAL2-G726-16/8000
+#AAL2-G726-24/8000
+#AAL2-G726-32/8000
+#AAL2-G726-40/8000
+
+# Maybe FS wants capital OPUS and SPEEX...
+# mod_opus
+#opus/48000/2
+
+# (in core)
+#speex/8000
+#speex/16000
+#speex/32000
