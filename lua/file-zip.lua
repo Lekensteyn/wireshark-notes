@@ -40,6 +40,8 @@ local function make_fields(field_abbr_prefix, field_defs, hfs_out, hfs_list_out)
 end
 
 local proto_zip = Proto.new("zip_archive", "Zip Archive")
+proto_zip.prefs.decompress = Pref.bool("Decompress file data", true,
+    "Whether file data should be decompressed or not.")
 local hf = {}
 local general_purpose_flags_def = {
     _ = {ProtoField.uint16, "General purpose bit flag", base.HEX},
@@ -301,8 +303,8 @@ local function dissect_one(tvb, offset, pinfo, tree)
         end
         if data_len and data_len > 0 then
             subtree:add(hf.entry.data,          tvb(offset, data_len))
-            -- Try to decompress Deflate
-            if comp_method == 8 then
+            -- Try to decompress Deflate (if allowed)
+            if proto_zip.prefs.decompress and comp_method == 8 then
                 local data_tvb = tvb(offset, data_len):uncompress("Decompressed data")
                 if data_tvb then
                     subtree:add(hf.entry.data_uncomp, data_tvb)
