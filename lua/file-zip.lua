@@ -38,16 +38,27 @@ end
 
 local proto_zip = Proto.new("zip_archive", "Zip Archive")
 local hf = {}
+local general_purpose_flags_def = {
+    _ = {ProtoField.uint16, "General purpose bit flag", base.HEX},
+    -- TODO fix wslua documentation, it is wrong on ProtoField.bool.
+    encrypted       = {ProtoField.bool, "Is encrypted",             16, nil, 0x0001},
+    comp_option     = {ProtoField.bool, "Compr-specific options",   16, nil, 0x0006},
+    has_data_desc   = {ProtoField.bool, "Data descriptor present",  16, nil, 0x0008},
+    enhanced_deflate= {ProtoField.bool, "Enhanced deflating",       16, nil, 0x0010},
+    compr_patched   = {ProtoField.bool, "Compressed patched data",  16, nil, 0x0020},
+    strong_encrypt  = {ProtoField.bool, "Strong encryption",        16, nil, 0x0040},
+    unused          = {ProtoField.bool, "Unused",                   16, nil, 0x0780},
+    lang_encoding   = {ProtoField.bool, "Language encoding",        16, {"UTF-8", "System-specific"}, 0x0800},
+    enhanced_compr  = {ProtoField.bool, "Enhanced compression",     16, nil, 0x1000},
+    hdr_data_masked = {ProtoField.bool, "Local Header data masked", 16, nil, 0x2000},
+    reserved        = {ProtoField.bool, "Reserved",                 16, nil, 0xc000},
+}
 make_fields("zip_archive", {
     signature = {ProtoField.uint32, base.HEX},
     entry = {
         _ = {ProtoField.none, "File entry"},
         version         = {ProtoField.uint16, base.DEC},
-        flag = {
-            _ = {ProtoField.uint16, "General purpose bit flag", base.HEX},
-            -- TODO fi wslua documentation, it is wrong.
-            has_data_desc   = {ProtoField.bool, 16, nil, 0x0008, "Whether data descriptor is present"},
-        },
+        flag = general_purpose_flags_def,
         comp_method     = {ProtoField.uint16, base.HEX},
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
@@ -70,7 +81,7 @@ make_fields("zip_archive", {
         _ = {ProtoField.none, "Central Directory Record"},
         version_made    = {ProtoField.uint16, base.HEX_DEC},
         version_extract = {ProtoField.uint16, base.HEX_DEC},
-        flag            = {ProtoField.uint16, base.HEX},
+        flag = general_purpose_flags_def,
         comp_method     = {ProtoField.uint16, base.HEX},
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
@@ -83,7 +94,7 @@ make_fields("zip_archive", {
         disk_number     = {ProtoField.uint16, base.DEC},
         attr_intern     = {ProtoField.uint16, base.HEX},
         attr_extern     = {ProtoField.uint32, base.HEX},
-        relative_offset = {ProtoField.uint32, base.DEC},
+        relative_offset = {ProtoField.uint32, base.HEX_DEC},
         filename        = {ProtoField.string},
         extra           = {ProtoField.bytes},
         comment         = {ProtoField.string},
@@ -95,7 +106,7 @@ make_fields("zip_archive", {
         num_entries     = {ProtoField.uint16, base.DEC},
         num_entries_total = {ProtoField.uint16, base.DEC},
         size            = {ProtoField.uint32, base.DEC},
-        relative_offset = {ProtoField.uint32, base.DEC},
+        relative_offset = {ProtoField.uint32, base.HEX_DEC},
         comment_len     = {ProtoField.uint16, base.DEC},
     },
 }, hf, proto_zip.fields)
@@ -148,6 +159,22 @@ local function find_data_desc(tvb)
     end
 end
 
+local function dissect_flags(hfs, tvb, tree)
+    local flgtree = tree:add_le(hfs._,  tvb)
+    -- TODO why does flag.has_data_desc segfault if tvb is not given?
+    flgtree:add_le(hfs.encrypted,       tvb)
+    flgtree:add_le(hfs.comp_option,     tvb)
+    flgtree:add_le(hfs.has_data_desc,   tvb)
+    flgtree:add_le(hfs.enhanced_deflate,tvb)
+    flgtree:add_le(hfs.compr_patched,   tvb)
+    flgtree:add_le(hfs.strong_encrypt,  tvb)
+    flgtree:add_le(hfs.unused,          tvb)
+    flgtree:add_le(hfs.lang_encoding,   tvb)
+    flgtree:add_le(hfs.enhanced_compr,  tvb)
+    flgtree:add_le(hfs.hdr_data_masked, tvb)
+    flgtree:add_le(hfs.reserved,        tvb)
+end
+
 local function dissect_one(tvb, offset, pinfo, tree)
     local orig_offset = offset
     local magic = tvb(offset, 4):le_int()
@@ -156,9 +183,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         -- header
         subtree:add_le(hf.signature,            tvb(offset, 4))
         subtree:add_le(hf.entry.version,        tvb(offset + 4, 2))
-        local flgtree = subtree:add_le(hf.entry.flag._, tvb(offset + 6, 2))
-        -- TODO why does flag.has_data_desc segfault if tvb is not given?
-        flgtree:add_le(hf.entry.flag.has_data_desc, tvb(offset + 6, 2))
+        dissect_flags(hf.entry.flag,            tvb(offset + 6, 2), subtree)
         subtree:add_le(hf.entry.comp_method,    tvb(offset + 8, 2))
         subtree:add_le(hf.entry.lastmod_time,   tvb(offset + 10, 2))
         subtree:add_le(hf.entry.lastmod_date,   tvb(offset + 12, 2))
@@ -213,7 +238,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:add_le(hf.signature,            tvb(offset, 2))
         subtree:add_le(hf.cd.version_made,      tvb(offset + 4, 2))
         subtree:add_le(hf.cd.version_extract,   tvb(offset + 6, 2))
-        subtree:add_le(hf.cd.flag,              tvb(offset + 8, 2))
+        dissect_flags(hf.cd.flag,               tvb(offset + 8, 2), subtree)
         subtree:add_le(hf.cd.comp_method,       tvb(offset + 10, 2))
         subtree:add_le(hf.cd.lastmod_time,      tvb(offset + 12, 2))
         subtree:add_le(hf.cd.lastmod_date,      tvb(offset + 14, 2))
