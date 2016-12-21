@@ -56,17 +56,26 @@ local general_purpose_flags_def = {
 local extra_def = {
     _ = {ProtoField.none, "Extensible data fields"},
     header_id       = {ProtoField.uint16, base.HEX, {
+        [0x5455] = "Extended timestamp",
+        [0x7875] = "Unix UID/GIDs",
         [0xcafe] = "Jar magic number", -- see java/util/jar/JarOutputStream.java
     }},
     data_size       = {ProtoField.uint16, base.DEC},
+    data            = {ProtoField.bytes},
 }
+local compr_method_def = {ProtoField.uint16, base.HEX, {
+    [0] = "Store",
+    [8] = "Deflate",
+    [12] = "BZIP2",
+    [14] = "LZMA (EFS)",
+}}
 make_fields("zip_archive", {
     signature = {ProtoField.uint32, base.HEX},
     entry = {
         _ = {ProtoField.none, "File entry"},
         version         = {ProtoField.uint16, base.DEC},
         flag = general_purpose_flags_def,
-        comp_method     = {ProtoField.uint16, base.HEX},
+        comp_method     = compr_method_def,
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
         crc32           = {ProtoField.uint32, base.HEX},
@@ -89,7 +98,7 @@ make_fields("zip_archive", {
         version_made    = {ProtoField.uint16, base.HEX_DEC},
         version_extract = {ProtoField.uint16, base.HEX_DEC},
         flag = general_purpose_flags_def,
-        comp_method     = {ProtoField.uint16, base.HEX},
+        comp_method     = compr_method_def,
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
         crc32           = {ProtoField.uint32, base.HEX},
@@ -189,6 +198,9 @@ local function dissect_extra(hfs, tvb, tree)
         etree:add_le(hfs.header_id,         tvb(offset, 2))
         etree:add_le(hfs.data_size,         tvb(offset + 2, 2))
         local data_size = tvb(offset + 2, 2):le_uint()
+        if data_size > 0 then
+            etree:add_le(hfs.data,              tvb(offset + 4, data_size))
+        end
         offset = offset + 4 + data_size
     end
 end
