@@ -54,8 +54,9 @@ _default_flags+=\ -fsanitize=undefined
 _default_flags+=\ -fdiagnostics-color
 _default_flags+=\ -fuse-ld=gold
 # Supported in GCC since 2007 (?), but only in Clang 3.8
-#_default_flags+=" -fdebug-prefix-map=$builddir="
-#_default_flags+=" -fdebug-prefix-map=$remotesrcdir="
+# In GDB, use "dir /tmp/wireshark" to add the source directory anyway.
+_default_flags+=" -fdebug-prefix-map=$builddir="
+_default_flags+=" -fdebug-prefix-map=$remotesrcdir="
 CFLAGS="${CFLAGS-$_default_flags -fno-common}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
 # Default to use the same CXXFLAGS as CFLAGS (common case)
 CXXFLAGS="${CXXFLAGS-$CFLAGS}"
@@ -111,7 +112,7 @@ remotecmd="mysh() {
         schroot -c chroot:arch -- sh \"\$@\";
     fi
 }; mysh -c '
-PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/core_perl;
+PATH=\$PATH:/usr/bin/core_perl;
 if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
     mkdir -p $builddir && cd $builddir &&
     set -x &&
@@ -128,7 +129,7 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DENABLE_QT5=1 \
         -DENABLE_GEOIP=1 \
         -DENABLE_KERBEROS=1 \
-        -DENABLE_SBC=0 \
+        -DENABLE_SBC=1 \
         -DENABLE_SMI=0 \
         -DENABLE_GNUTLS=1 \
         -DENABLE_GCRYPT=1 \

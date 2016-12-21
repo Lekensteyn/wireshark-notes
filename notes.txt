@@ -208,3 +208,27 @@ Ninja (-j10)    141.0s+/-.261s  19.90s+/-.214s  121.0s+/-.073s  .366s+/-.012s
 export CCC_CC=clang CCC_CXX=clang++
 cmake -GNinja -DCMAKE_C_COMPILER=/usr/lib/clang-analyzer/scan-build/ccc-analyzer -DCMAKE_CXX_COMPILER=/usr/lib/clang-analyzer/scan-build/c++-analyzer /tmp/wireshark/ -DCMAKE_BUILD_TYPE=Debug -DDISABLE_WERROR=1 -DENABLE_EXTRA_COMPILER_WARNINGS=1 -DCMAKE_EXPORT_COMPILE_COMMANDS=1
 script -c 'time scan-build -o $PWD/scanresults ninja' build.log
+
+Enable MPX (GCC 6)
+-mmpx -fcheck-pointer-bounds
+-fno-sanitize=address -fno-sanitize=undefined -fuse-ld=bfd
+# Have to disable --as-needed and -pie in CMakeLists.txt too, otherwise
+# -Wl,--as-needed results in:
+/usr/lib/gcc/x86_64-pc-linux-gnu/6.1.1/../../../../lib/libmpxwrappers.so: undefined reference to `get_bd'
+# alternatively, add -lmpx -lmpxwrappers to linker flags, see
+# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=77267
+# -pie gives:
+/usr/bin/ld.bfd: run/libgtkui.a(expert_comp_dlg.c.o)(.text+0x8526): reloc against `expert_group_vals': error 4
+/usr/bin/ld.bfd: final link failed: Nonrepresentable section on output
+# fixed in binutils 2.28 https://sourceware.org/bugzilla/show_bug.cgi?id=20550
+
+
+# Find all hf_ variables
+set pagination off
+set logging on hf.txt
+info variables ^hf_
+# Then find all hf_ int fields that are not registered
+awk <hf-v2.3.0rc0-820-g8b04755.txt '/^File/{sub(":",""); file=$NF} /^(static )?g?int hf_/&&!/\[|\*/{sub(";",""); print "if " $NF "<1"; print " printf \"%s %s %d\\n\", \""file"\", \""$NF"\", "$NF; print "end"}' > commands
+set pagination off
+set logging on vals.txt
+source commands
