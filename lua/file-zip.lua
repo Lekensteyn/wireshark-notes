@@ -45,8 +45,8 @@ make_fields("zip_archive", {
         version         = {ProtoField.uint16, base.DEC},
         flag            = {ProtoField.uint16, base.HEX},
         comp_method     = {ProtoField.uint16, base.HEX},
-        mod_time        = {ProtoField.uint16, base.HEX},
-        mod_date        = {ProtoField.uint16, base.HEX},
+        lastmod_time    = {ProtoField.uint16, base.HEX},
+        lastmod_date    = {ProtoField.uint16, base.HEX},
         crc32           = {ProtoField.uint32, base.HEX},
         size_comp       = {ProtoField.uint32, base.DEC},
         size_uncomp     = {ProtoField.uint32, base.DEC},
@@ -57,7 +57,26 @@ make_fields("zip_archive", {
         data            = {ProtoField.bytes},
     },
     cd = {
-        _ = {ProtoField.none, "Central Directory Record"}
+        _ = {ProtoField.none, "Central Directory Record"},
+        version_made    = {ProtoField.uint16, base.HEX_DEC},
+        version_extract = {ProtoField.uint16, base.HEX_DEC},
+        flag            = {ProtoField.uint16, base.HEX},
+        comp_method     = {ProtoField.uint16, base.HEX},
+        lastmod_time    = {ProtoField.uint16, base.HEX},
+        lastmod_date    = {ProtoField.uint16, base.HEX},
+        crc32           = {ProtoField.uint32, base.HEX},
+        size_comp       = {ProtoField.uint32, base.DEC},
+        size_uncomp     = {ProtoField.uint32, base.DEC},
+        filename_len    = {ProtoField.uint16, base.DEC},
+        extra_len       = {ProtoField.uint16, base.DEC},
+        comment_len     = {ProtoField.uint16, base.DEC},
+        disk_number     = {ProtoField.uint16, base.DEC},
+        attr_intern     = {ProtoField.uint16, base.HEX},
+        attr_extern     = {ProtoField.uint32, base.HEX},
+        relative_offset = {ProtoField.uint32, base.DEC},
+        filename        = {ProtoField.string},
+        extra           = {ProtoField.bytes},
+        comment         = {ProtoField.string},
     },
 }, hf, proto_zip.fields)
 
@@ -74,8 +93,8 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:add_le(hf.entry.version,        tvb(offset + 4, 2))
         subtree:add_le(hf.entry.flag,           tvb(offset + 6, 2))
         subtree:add_le(hf.entry.comp_method,    tvb(offset + 8, 2))
-        subtree:add_le(hf.entry.mod_time,       tvb(offset + 10, 2))
-        subtree:add_le(hf.entry.mod_date,       tvb(offset + 12, 2))
+        subtree:add_le(hf.entry.lastmod_time,   tvb(offset + 10, 2))
+        subtree:add_le(hf.entry.lastmod_date,   tvb(offset + 12, 2))
         subtree:add_le(hf.entry.crc32,          tvb(offset + 14, 4))
         subtree:add_le(hf.entry.size_comp,      tvb(offset + 18, 4))
         subtree:add_le(hf.entry.size_uncomp,    tvb(offset + 22, 4))
@@ -98,7 +117,42 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:set_len(offset - orig_offset)
         return offset
     elseif magic == 0x02014b50 then -- Central Directory
-        local subtree = tree:add_le(hf.cd._,    tvb(offset, 30))
+        local subtree = tree:add_le(hf.cd._,    tvb(offset, 46))
+        subtree:add_le(hf.cd.version_made,      tvb(offset + 4, 2))
+        subtree:add_le(hf.cd.version_extract,   tvb(offset + 6, 2))
+        subtree:add_le(hf.cd.flag,              tvb(offset + 8, 2))
+        subtree:add_le(hf.cd.comp_method,       tvb(offset + 10, 2))
+        subtree:add_le(hf.cd.lastmod_time,      tvb(offset + 12, 2))
+        subtree:add_le(hf.cd.lastmod_date,      tvb(offset + 14, 2))
+        subtree:add_le(hf.cd.crc32,             tvb(offset + 16, 4))
+        subtree:add_le(hf.cd.size_comp,         tvb(offset + 20, 4))
+        subtree:add_le(hf.cd.size_uncomp,       tvb(offset + 24, 4))
+        subtree:add_le(hf.cd.filename_len,      tvb(offset + 28, 2))
+        subtree:add_le(hf.cd.extra_len,         tvb(offset + 30, 2))
+        subtree:add_le(hf.cd.comment_len,       tvb(offset + 32, 2))
+        subtree:add_le(hf.cd.disk_number,       tvb(offset + 34, 2))
+        subtree:add_le(hf.cd.attr_intern,       tvb(offset + 36, 2))
+        subtree:add_le(hf.cd.attr_extern,       tvb(offset + 38, 4))
+        subtree:add_le(hf.cd.relative_offset,   tvb(offset + 42, 4))
+
+        local filename_len = tvb(offset + 28, 2):le_uint()
+        local extra_len = tvb(offset + 30, 2):le_uint()
+        local comment_len = tvb(offset + 32, 2):le_uint()
+
+        -- skip header
+        offset = offset + 46
+        subtree:add(hf.cd.filename,             tvb(offset, filename_len))
+        subtree:append_text(": " .. tvb(offset, filename_len):string())
+        offset = offset + filename_len
+        subtree:add(hf.cd.extra,                tvb(offset, extra_len))
+        offset = offset + extra_len
+        if comment_len > 0 then
+            subtree:add(hf.cd.comment,              tvb(offset, comment_len))
+            offset = offset + comment_len
+        end
+
+        subtree:set_len(offset - orig_offset)
+        return offset
     elseif tvb:raw(offset, 2) == "PK" then
         -- Unknown signature
         tree:add_le(hf.signature, tvb(offset, 4))
