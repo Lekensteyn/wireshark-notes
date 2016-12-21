@@ -86,6 +86,7 @@ make_fields("zip_archive", {
         filename        = {ProtoField.string},
         extra           = extra_def,
         data            = {ProtoField.bytes},
+        data_uncomp     = {ProtoField.bytes},
         data_desc = {
             _ = {ProtoField.none, "Data descriptor"},
             crc32           = {ProtoField.uint32, base.HEX},
@@ -222,6 +223,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:add_le(hf.entry.size_uncomp,    tvb(offset + 22, 4))
         subtree:add_le(hf.entry.filename_len,   tvb(offset + 26, 2))
         subtree:add_le(hf.entry.extra_len,      tvb(offset + 28, 2))
+        local comp_method = tvb(offset + 8, 2):le_uint()
         local flag = tvb(offset + 6, 2):le_uint()
         local data_len = tvb(offset + 18, 4):le_uint()
         local filename_len = tvb(offset + 26, 2):le_uint()
@@ -245,6 +247,13 @@ local function dissect_one(tvb, offset, pinfo, tree)
         end
         if data_len and data_len > 0 then
             subtree:add(hf.entry.data,          tvb(offset, data_len))
+            -- Try to decompress Deflate
+            if comp_method == 8 then
+                local data_tvb = tvb(offset, data_len):uncompress("Decompressed data")
+                if data_tvb then
+                    subtree:add(hf.entry.data_uncomp, data_tvb)
+                end
+            end
             offset = offset + data_len
         end
         -- Optional data descriptor header
