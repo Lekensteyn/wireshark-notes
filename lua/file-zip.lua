@@ -2,7 +2,10 @@
 -- Zip Archive dissector
 -- Author: Peter Wu <peter@lekensteyn.nl>
 --
--- Spec: https://en.wikipedia.org/wiki/Zip_(file_format)#File_headers
+-- Information about the file format:
+-- https://en.wikipedia.org/wiki/Zip_(file_format)#File_headers
+-- https://web.archive.org/https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+-- (.ZIP File Format Specification 6.3.4, Revised October 1, 2014)
 --
 
 --
@@ -53,6 +56,43 @@ local general_purpose_flags_def = {
     hdr_data_masked = {ProtoField.bool, "Local Header data masked", 16, nil, 0x2000},
     reserved        = {ProtoField.bool, "Reserved",                 16, nil, 0xc000},
 }
+local compr_method_def = {ProtoField.uint16, base.HEX, {
+    [0] = "Store",
+    [8] = "Deflate",
+    [12] = "BZIP2",
+    [14] = "LZMA (EFS)",
+}}
+local version_made_def = {
+    _ = {ProtoField.none, "Creator version"},
+    system      = {ProtoField.uint8, "System", base.DEC, {
+        [0] = "MS-DOS and OS/2 (FAT / VFAT / FAT32 file systems)",
+        [1] = "Amiga",
+        [2] = "OpenVMS",
+        [3] = "UNIX",
+        [4] = "VM/CMS",
+        [5] = "Atari ST",
+        [6] = "OS/2 H.P.F.S.",
+        [7] = "Macintosh",
+        [8] = "Z-System",
+        [9] = "CP/M",
+        [10] = "Windows NTFS",
+        [11] = "MVS (OS/390 - Z/OS)",
+        [12] = "VSE",
+        [13] = "Acorn Risc",
+        [14] = "VFAT",
+        [15] = "alternate MVS",
+        [16] = "BeOS",
+        [17] = "Tandem",
+        [18] = "OS/400",
+        [19] = "OS X (Darwin)",
+    }},
+    spec        = {ProtoField.uint8, "Supported ZIP specification version"},
+}
+local version_req_def = {
+    _ = {ProtoField.none, "Version needed to extract"},
+    system      = version_made_def.system,
+    spec        = {ProtoField.uint8, "Required ZIP specification version"}
+}
 local extra_def = {
     _ = {ProtoField.none, "Extensible data fields"},
     header_id       = {ProtoField.uint16, base.HEX, {
@@ -63,18 +103,12 @@ local extra_def = {
     data_size       = {ProtoField.uint16, base.DEC},
     data            = {ProtoField.bytes},
 }
-local compr_method_def = {ProtoField.uint16, base.HEX, {
-    [0] = "Store",
-    [8] = "Deflate",
-    [12] = "BZIP2",
-    [14] = "LZMA (EFS)",
-}}
 make_fields("zip_archive", {
     signature = {ProtoField.uint32, base.HEX},
     entry = {
         _ = {ProtoField.none, "File entry"},
-        version         = {ProtoField.uint16, base.DEC},
-        flag = general_purpose_flags_def,
+        version_req     = version_req_def,
+        flag            = general_purpose_flags_def,
         comp_method     = compr_method_def,
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
@@ -96,9 +130,9 @@ make_fields("zip_archive", {
     },
     cd = {
         _ = {ProtoField.none, "Central Directory Record"},
-        version_made    = {ProtoField.uint16, base.HEX_DEC},
-        version_extract = {ProtoField.uint16, base.HEX_DEC},
-        flag = general_purpose_flags_def,
+        version_made    = version_made_def,
+        version_req     = version_req_def,
+        flag            = general_purpose_flags_def,
         comp_method     = compr_method_def,
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
@@ -176,6 +210,14 @@ local function find_data_desc(tvb)
     end
 end
 
+local function dissect_version(hfs, tvb, tree)
+    local ti = tree:add_le(hfs._, tvb)
+    local spec_version = tvb(0, 1):uint()
+    ti:add(hfs.spec,        tvb(0, 1)):append_text(string.format(" (%d.%d)",
+        spec_version / 10, spec_version % 10))
+    ti:add(hfs.system,      tvb(1, 1))
+end
+
 local function dissect_flags(hfs, tvb, tree)
     local flgtree = tree:add_le(hfs._,  tvb)
     -- TODO why does flag.has_data_desc segfault if tvb is not given?
@@ -213,7 +255,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         local subtree = tree:add_le(hf.entry._, tvb(offset, 30))
         -- header
         subtree:add_le(hf.signature,            tvb(offset, 4))
-        subtree:add_le(hf.entry.version,        tvb(offset + 4, 2))
+        dissect_version(hf.entry.version_req,   tvb(offset + 4, 2), subtree)
         dissect_flags(hf.entry.flag,            tvb(offset + 6, 2), subtree)
         subtree:add_le(hf.entry.comp_method,    tvb(offset + 8, 2))
         subtree:add_le(hf.entry.lastmod_time,   tvb(offset + 10, 2))
@@ -275,8 +317,8 @@ local function dissect_one(tvb, offset, pinfo, tree)
     elseif magic == 0x02014b50 then -- Central Directory
         local subtree = tree:add_le(hf.cd._,    tvb(offset, 46))
         subtree:add_le(hf.signature,            tvb(offset, 2))
-        subtree:add_le(hf.cd.version_made,      tvb(offset + 4, 2))
-        subtree:add_le(hf.cd.version_extract,   tvb(offset + 6, 2))
+        dissect_version(hf.cd.version_made,     tvb(offset + 4, 2), subtree)
+        dissect_version(hf.cd.version_req,      tvb(offset + 6, 2), subtree)
         dissect_flags(hf.cd.flag,               tvb(offset + 8, 2), subtree)
         subtree:add_le(hf.cd.comp_method,       tvb(offset + 10, 2))
         subtree:add_le(hf.cd.lastmod_time,      tvb(offset + 12, 2))
