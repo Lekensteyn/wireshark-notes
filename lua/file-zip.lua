@@ -223,7 +223,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:add_le(hf.entry.filename_len,   tvb(offset + 26, 2))
         subtree:add_le(hf.entry.extra_len,      tvb(offset + 28, 2))
         local flag = tvb(offset + 6, 2):le_uint()
-        local data_len = tvb(offset + 18, 2):le_uint()
+        local data_len = tvb(offset + 18, 4):le_uint()
         local filename_len = tvb(offset + 26, 2):le_uint()
         local extra_len = tvb(offset + 28, 2):le_uint()
 
