@@ -53,6 +53,13 @@ local general_purpose_flags_def = {
     hdr_data_masked = {ProtoField.bool, "Local Header data masked", 16, nil, 0x2000},
     reserved        = {ProtoField.bool, "Reserved",                 16, nil, 0xc000},
 }
+local extra_def = {
+    _ = {ProtoField.none, "Extensible data fields"},
+    header_id       = {ProtoField.uint16, base.HEX, {
+        [0xcafe] = "Jar magic number", -- see java/util/jar/JarOutputStream.java
+    }},
+    data_size       = {ProtoField.uint16, base.DEC},
+}
 make_fields("zip_archive", {
     signature = {ProtoField.uint32, base.HEX},
     entry = {
@@ -68,7 +75,7 @@ make_fields("zip_archive", {
         filename_len    = {ProtoField.uint16, base.DEC},
         extra_len       = {ProtoField.uint16, base.DEC},
         filename        = {ProtoField.string},
-        extra           = {ProtoField.bytes},
+        extra           = extra_def,
         data            = {ProtoField.bytes},
         data_desc = {
             _ = {ProtoField.none, "Data descriptor"},
@@ -96,7 +103,7 @@ make_fields("zip_archive", {
         attr_extern     = {ProtoField.uint32, base.HEX},
         relative_offset = {ProtoField.uint32, base.HEX_DEC},
         filename        = {ProtoField.string},
-        extra           = {ProtoField.bytes},
+        extra           = extra_def,
         comment         = {ProtoField.string},
     },
     eocd = {
@@ -175,6 +182,17 @@ local function dissect_flags(hfs, tvb, tree)
     flgtree:add_le(hfs.reserved,        tvb)
 end
 
+local function dissect_extra(hfs, tvb, tree)
+    local etree = tree:add(hfs._, tvb)
+    local offset, length = 0, tvb:len()
+    while offset + 4 <= length do
+        etree:add_le(hfs.header_id,         tvb(offset, 2))
+        etree:add_le(hfs.data_size,         tvb(offset + 2, 2))
+        local data_size = tvb(offset + 2, 2):le_uint()
+        offset = offset + 4 + data_size
+    end
+end
+
 local function dissect_one(tvb, offset, pinfo, tree)
     local orig_offset = offset
     local magic = tvb(offset, 4):le_int()
@@ -210,7 +228,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:append_text(": " .. tvb(offset, filename_len):string())
         offset = offset + filename_len
         if extra_len > 0 then
-            subtree:add(hf.entry.extra,         tvb(offset, extra_len))
+            dissect_extra(hf.entry.extra,       tvb(offset, extra_len), subtree)
             offset = offset + extra_len
         end
         if data_len and data_len > 0 then
@@ -262,7 +280,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:append_text(": " .. tvb(offset, filename_len):string())
         offset = offset + filename_len
         if extra_len > 0 then
-            subtree:add(hf.cd.extra,            tvb(offset, extra_len))
+            dissect_extra(hf.cd.extra,          tvb(offset, extra_len), subtree)
             offset = offset + extra_len
         end
         if comment_len > 0 then
