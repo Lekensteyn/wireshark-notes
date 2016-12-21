@@ -93,6 +93,10 @@ local version_req_def = {
     system      = version_made_def.system,
     spec        = {ProtoField.uint8, "Required ZIP specification version"}
 }
+local attr_extern_def = {
+    _ = {ProtoField.uint32, "External file attributes", base.HEX},
+    file_mode       = {ProtoField.uint16, "File mode", base.OCT},
+}
 local extra_def = {
     _ = {ProtoField.none, "Extensible data fields"},
     header_id       = {ProtoField.uint16, base.HEX, {
@@ -144,7 +148,7 @@ make_fields("zip_archive", {
         comment_len     = {ProtoField.uint16, base.DEC},
         disk_number     = {ProtoField.uint16, base.DEC},
         attr_intern     = {ProtoField.uint16, base.HEX},
-        attr_extern     = {ProtoField.uint32, base.HEX},
+        attr_extern     = attr_extern_def,
         relative_offset = {ProtoField.uint32, base.HEX_DEC},
         filename        = {ProtoField.string},
         extra           = extra_def,
@@ -232,6 +236,14 @@ local function dissect_flags(hfs, tvb, tree)
     flgtree:add_le(hfs.enhanced_compr,  tvb)
     flgtree:add_le(hfs.hdr_data_masked, tvb)
     flgtree:add_le(hfs.reserved,        tvb)
+end
+
+local function dissect_extern_attr(hfs, tvb, tree, os_version)
+    local ti = tree:add_le(hfs._, tvb)
+    if os_version == 3 then -- Unix
+        -- Info-ZIP stores file mode in higher bits (see unix/unix.c)
+        ti:add_le(hfs.file_mode,            tvb(2, 2))
+    end
 end
 
 local function dissect_extra(hfs, tvb, tree)
@@ -331,7 +343,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:add_le(hf.cd.comment_len,       tvb(offset + 32, 2))
         subtree:add_le(hf.cd.disk_number,       tvb(offset + 34, 2))
         subtree:add_le(hf.cd.attr_intern,       tvb(offset + 36, 2))
-        subtree:add_le(hf.cd.attr_extern,       tvb(offset + 38, 4))
+        dissect_extern_attr(hf.cd.attr_extern,  tvb(offset + 38, 4), subtree, tvb(offset + 5, 1):le_uint())
         subtree:add_le(hf.cd.relative_offset,   tvb(offset + 42, 4))
 
         local filename_len = tvb(offset + 28, 2):le_uint()
