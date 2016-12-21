@@ -100,6 +100,54 @@ make_fields("zip_archive", {
     },
 }, hf, proto_zip.fields)
 
+--[[ This can be used when implementing a "proper" program.
+--
+-- Parse Zip Archive as follows:
+-- 1. Find EOCD, obtain CD offset and length
+-- 2. Find first CD. Then for each CD:
+-- 2a. Obtain Local File Header offset and data size.
+-- 2b. Find Local File Header.
+-- ...
+--
+local function find_eocd(tvb)
+    if tvb(0, 4):le_uint() ~= 0x06054b50 then
+        -- Magic not found... possibly comment present
+        return
+    end
+    return {
+        offset = tvb(16, 4):le_uint(),
+        length = tvb(12, 4):le_uint(),
+    }
+end
+--]]
+
+-- Returns the length of the data and the length of the data descriptor.
+local function find_data_desc(tvb)
+    local dd_offset = 0
+    local length = tvb:len()
+    -- Scans (byte for byte) for the size field and try to confirm the validity
+    -- of this length field. It might still have a false positive, but at least
+    -- it allows for a linear search.
+    while dd_offset + 8 < length do
+        -- Size field is at offset 4 (if sig exists) or at offset 8 otherwise.
+        local size_offset
+        if tvb(dd_offset, 4):le_uint() == 0x08074b50 then
+            size_offset = dd_offset + 8
+            -- If overflowing, size must be invalid.
+            if size_offset + 4 > length then return end
+        else
+            size_offset = dd_offset + 4
+        end
+        -- Validata size or continue with next byte on failure.
+        local comp_size = tvb(size_offset, 4):le_uint()
+        if comp_size == dd_offset then
+            return dd_offset, (size_offset - dd_offset) + 8
+        else
+            dd_offset = dd_offset + 1
+        end
+    end
+end
+
 local function dissect_one(tvb, offset, pinfo, tree)
     local orig_offset = offset
     local magic = tvb(offset, 4):le_int()
@@ -125,21 +173,11 @@ local function dissect_one(tvb, offset, pinfo, tree)
         local extra_len = tvb(offset + 28, 2):le_uint()
 
         -- Optional data descriptor follows data if GP flag bit 3 (0x8) is set
-        --[[ This is wrong, cannot know the location of dd, have to query CD first
         local ddlen
         if bit.band(flag, 8) ~= 0 then
-            local dd_offset = offset + 30 + filename_len + extra_len + data_len
-            if tvb(dd_offset, 4):le_uint() == 0x08074b50 then
-                -- Optional data descriptor signature... WTF, why?!
-                dd_offset = dd_offset + 4
-                ddlen = 16
-            else
-                ddlen = 12
-            end
-            subtree:add_le(hf.entry.data_desc.size_comp,     tvb(dd_offset + 4, 4))
-            --data_len = tvb(dd_offset + 4, 4):le_uint()
+            local data_offset = offset + 30 + filename_len + extra_len
+            data_len, ddlen = find_data_desc(tvb(data_offset))
         end
-        --]]
 
         -- skip header
         offset = offset + 30
@@ -150,11 +188,10 @@ local function dissect_one(tvb, offset, pinfo, tree)
             subtree:add(hf.entry.extra,         tvb(offset, extra_len))
             offset = offset + extra_len
         end
-        if data_len > 0 then
+        if data_len and data_len > 0 then
             subtree:add(hf.entry.data,          tvb(offset, data_len))
             offset = offset + data_len
         end
-        --[[ This does need really work..
         -- Optional data descriptor header
         if ddlen then
             local dd_offset = offset
@@ -168,7 +205,6 @@ local function dissect_one(tvb, offset, pinfo, tree)
             ddtree:add_le(hf.entry.data_desc.size_uncomp,   tvb(dd_offset + 8, 4))
             offset = offset + ddlen
         end
-        --]]
 
         subtree:set_len(offset - orig_offset)
         return offset
