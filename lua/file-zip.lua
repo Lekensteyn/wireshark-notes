@@ -78,6 +78,16 @@ make_fields("zip_archive", {
         extra           = {ProtoField.bytes},
         comment         = {ProtoField.string},
     },
+    eocd = {
+        _ = {ProtoField.none, "End of Central Directory Record"},
+        disk_number     = {ProtoField.uint16, base.DEC},
+        disk_start      = {ProtoField.uint16, base.DEC},
+        num_entries     = {ProtoField.uint16, base.DEC},
+        num_entries_total = {ProtoField.uint16, base.DEC},
+        size            = {ProtoField.uint32, base.DEC},
+        relative_offset = {ProtoField.uint32, base.DEC},
+        comment_len     = {ProtoField.uint16, base.DEC},
+    },
 }, hf, proto_zip.fields)
 
 local function dissect_entry(tvb, pinfo, tree)
@@ -118,6 +128,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         return offset
     elseif magic == 0x02014b50 then -- Central Directory
         local subtree = tree:add_le(hf.cd._,    tvb(offset, 46))
+        subtree:add_le(hf.signature,            tvb(offset, 2))
         subtree:add_le(hf.cd.version_made,      tvb(offset + 4, 2))
         subtree:add_le(hf.cd.version_extract,   tvb(offset + 6, 2))
         subtree:add_le(hf.cd.flag,              tvb(offset + 8, 2))
@@ -138,7 +149,6 @@ local function dissect_one(tvb, offset, pinfo, tree)
         local filename_len = tvb(offset + 28, 2):le_uint()
         local extra_len = tvb(offset + 30, 2):le_uint()
         local comment_len = tvb(offset + 32, 2):le_uint()
-
         -- skip header
         offset = offset + 46
         subtree:add(hf.cd.filename,             tvb(offset, filename_len))
@@ -147,10 +157,28 @@ local function dissect_one(tvb, offset, pinfo, tree)
         subtree:add(hf.cd.extra,                tvb(offset, extra_len))
         offset = offset + extra_len
         if comment_len > 0 then
-            subtree:add(hf.cd.comment,              tvb(offset, comment_len))
+            subtree:add(hf.cd.comment,          tvb(offset, comment_len))
             offset = offset + comment_len
         end
+        subtree:set_len(offset - orig_offset)
+        return offset
+    elseif magic == 0x06054b50 then -- End of Central Directory
+        local subtree = tree:add_le(hf.cd._,    tvb(offset, 22))
+        subtree:add_le(hf.signature,            tvb(offset, 4))
+        subtree:add_le(hf.eocd.disk_number,     tvb(offset + 4, 2))
+        subtree:add_le(hf.eocd.disk_start,      tvb(offset + 6, 2))
+        subtree:add_le(hf.eocd.num_entries,     tvb(offset + 8, 2))
+        subtree:add_le(hf.eocd.num_entries_total, tvb(offset + 10, 2))
+        subtree:add_le(hf.eocd.size,            tvb(offset + 12, 4))
+        subtree:add_le(hf.eocd.relative_offset, tvb(offset + 16, 4))
+        subtree:add_le(hf.eocd.comment_len,     tvb(offset + 20, 2))
 
+        local comment_len = tvb(offset + 20, 2):le_uint()
+        offset = offset + 22
+        if comment_len > 0 then
+            subtree:add(hf.eocd.comment,        tvb(offset, comment_len))
+            offset = offset + comment_len
+        end
         subtree:set_len(offset - orig_offset)
         return offset
     elseif tvb:raw(offset, 2) == "PK" then
@@ -164,7 +192,7 @@ function proto_zip.dissector(tvb, pinfo, tree)
     --pinfo.cols.info = ""
 
     local next_offset = 0
-    while next_offset do
+    while next_offset < tvb:len() do
         next_offset = dissect_one(tvb, next_offset, pinfo, tree)
     end
     return next_offset
