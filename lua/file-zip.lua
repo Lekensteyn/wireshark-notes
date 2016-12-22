@@ -192,22 +192,22 @@ end
 -- Returns the length of the data and the length of the data descriptor.
 local function find_data_desc(tvb)
     local dd_offset = 0
-    local length = tvb:len()
+    local data = tvb:raw(tvb:offset())
     -- Scans (byte for byte) for the size field and try to confirm the validity
     -- of this length field. It might still have a false positive, but at least
-    -- it allows for a linear search.
-    while dd_offset + 8 < length do
+    -- it allows for a linear scan through the file (without consulting CD).
+    while dd_offset + 8 < #data do
         -- Size field is at offset 4 (if sig exists) or at offset 8 otherwise.
         local size_offset
-        if tvb(dd_offset, 4):le_uint() == 0x08074b50 then
+        if Struct.unpack("<I4", data, dd_offset + 1) == 0x08074b50 then
+            -- Expecting Data descriptor past the signature (of length 16)
+            if dd_offset + 16 > #data then return end
             size_offset = dd_offset + 8
-            -- If overflowing, size must be invalid.
-            if size_offset + 4 > length then return end
         else
             size_offset = dd_offset + 4
         end
         -- Validata size or continue with next byte on failure.
-        local comp_size = tvb(size_offset, 4):le_uint()
+        local comp_size = Struct.unpack("<I4", data, size_offset + 1)
         if comp_size == dd_offset then
             return dd_offset, (size_offset - dd_offset) + 8
         else
