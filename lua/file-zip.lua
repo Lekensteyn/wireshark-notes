@@ -196,21 +196,20 @@ local function find_data_desc(tvb)
     -- Scans (byte for byte) for the size field and try to confirm the validity
     -- of this length field. It might still have a false positive, but at least
     -- it allows for a linear scan through the file (without consulting CD).
-    while dd_offset + 8 < #data do
-        -- Size field is at offset 4 (if sig exists) or at offset 8 otherwise.
-        local size_offset
-        if Struct.unpack("<I4", data, dd_offset + 1) == 0x08074b50 then
-            -- Expecting Data descriptor past the signature (of length 16)
-            if dd_offset + 16 > #data then return end
-            size_offset = dd_offset + 8
+    while dd_offset + 16 <= #data do
+        -- Try to locate the begin of the Data descriptor header (dd_offset).
+        -- Assume no signature, so begin is at CRC-32 and size is next dword.
+        -- If there is actually a signature, then dd_offset-4 is the begin.
+        local comp_size = Struct.unpack("<I4", data, dd_offset + 5)
+        if comp_size == dd_offset - 4 and
+            Struct.unpack("<I4", data, dd_offset - 3) == 0x08074b50 then
+            -- Signature found, data ends four bytes ago.
+            return dd_offset - 4, 16
+        elseif comp_size == dd_offset then
+            -- Signature not found, but length matches.
+            return dd_offset, 12
         else
-            size_offset = dd_offset + 4
-        end
-        -- Validata size or continue with next byte on failure.
-        local comp_size = Struct.unpack("<I4", data, size_offset + 1)
-        if comp_size == dd_offset then
-            return dd_offset, (size_offset - dd_offset) + 8
-        else
+            -- Continue with next byte.
             dd_offset = dd_offset + 1
         end
     end
