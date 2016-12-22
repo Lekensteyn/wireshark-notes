@@ -24,7 +24,7 @@ local function make_fields(field_abbr_prefix, field_defs, hfs_out, hfs_list_out)
                 hfs_out[name], hfs_list_out)
         else
             local proto_field_constructor = params[1]
-            local field_abbr = field_abbr_prefix .. name
+            local field_abbr = string.gsub(field_abbr_prefix .. name, "%._$", "")
             local field
             if type(params[2]) == "string" then
                 -- Name was given, use it
