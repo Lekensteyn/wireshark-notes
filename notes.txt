@@ -232,3 +232,15 @@ awk <hf-v2.3.0rc0-820-g8b04755.txt '/^File/{sub(":",""); file=$NF} /^(static )?g
 set pagination off
 set logging on vals.txt
 source commands
+
+# Test ciphers with GnuTLS (CCM)
+# -CURVE-ALL:-SIGN-ALL to slim down Hello handshake size.
+psktool -p test.psk -u test
+gnutls-serv --http -p 4433 --pskpasswd=test.psk --noticket
+ --priority=+AEAD:+PSK:+AES-128-CCM:+AES-256-CCM-8:+AES-128-GCM
+# client (wait a bit in order to generate multiple packets)
+for s in 'GET / HTTP/1.1' 'Host: localhost' ''; do sleep .5; echo "$s"; done |
+gnutls-cli -p 443 localhost --pskusername=test --pskkey=...
+ --priority=%NO_SESSION_HASH:%NO_TICKETS:+MAC-ALL:+PSK:+AES-128-CCM:-CURVE-ALL:-SIGN-ALL
+# For DTLS, just append "-u", server will echo request as response
+(for s in 'DTLS1.2 test using GnuTLS 3.5.8' 'Works for me!'; do sleep .5; echo "$s";done)
