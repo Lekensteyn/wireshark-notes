@@ -121,6 +121,41 @@ static inline SSL_SESSION *ssl_get_session(const SSL *ssl)
 #endif
 }
 
+static void copy_master_secret(const SSL_SESSION *session,
+        unsigned char *master_key_out, int *keylen_out)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    static size_t (*func)();
+    if (!func) {
+        func = lookup_symbol("SSL_SESSION_get_master_key");
+    }
+    *keylen_out = func(session, master_key_out, SSL_MAX_MASTER_KEY_LENGTH);
+#else
+    if (session->master_key_length > 0) {
+        *keylen_out = session->master_key_length;
+        memcpy(master_key_out, session->master_key,
+                session->master_key_length);
+    }
+#endif
+}
+
+static void copy_client_random(const SSL *ssl, unsigned char *client_random)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    static size_t (*func)();
+    if (!func) {
+        func = lookup_symbol("SSL_get_client_random");
+    }
+    /* ssl->s3 is not checked in openssl 1.1.0-pre6, but let's assume that
+     * we have a valid SSL context if we have a non-NULL session. */
+    func(ssl, client_random, SSL3_RANDOM_SIZE);
+#else
+    if (ssl->s3) {
+        memcpy(client_random, ssl->s3->client_random, SSL3_RANDOM_SIZE);
+    }
+#endif
+}
+
 /* Copies SSL state for later comparison in tap_ssl_key. */
 static void ssl_tap_state_init(ssl_tap_state_t *state, const SSL *ssl)
 {
@@ -128,20 +163,7 @@ static void ssl_tap_state_init(ssl_tap_state_t *state, const SSL *ssl)
 
     memset(state, 0, sizeof(ssl_tap_state_t));
     if (session) {
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-        static size_t (*func)();
-        if (!func) {
-            func = lookup_symbol("SSL_SESSION_get_master_key");
-        }
-        state->master_key_length = func(session,
-                state->master_key, SSL_MAX_MASTER_KEY_LENGTH);
-#else
-        if (session->master_key_length > 0) {
-            state->master_key_length = session->master_key_length;
-            memcpy(state->master_key, session->master_key,
-                    session->master_key_length);
-        }
-#endif
+        copy_master_secret(session, state->master_key, &state->master_key_length);
     }
 }
 
@@ -157,20 +179,11 @@ static void tap_ssl_key(const SSL *ssl, ssl_tap_state_t *state)
     int master_key_length = 0;
 
     if (session) {
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-        /* ssl->s3 is not checked in openssl 1.1.0-pre6, but let's assume that
-         * we have a valid SSL context if we have a non-NULL session. */
-        SSL_get_client_random(ssl, client_random, SSL3_RANDOM_SIZE);
-        master_key_length = SSL_SESSION_get_master_key(session, master_key,
-                SSL_MAX_MASTER_KEY_LENGTH);
-#else
-        if (ssl->s3 && session->master_key_length > 0) {
-            memcpy(client_random, ssl->s3->client_random, SSL3_RANDOM_SIZE);
-
-            master_key_length = session->master_key_length;
-            memcpy(master_key, session->master_key, master_key_length);
+        copy_master_secret(session, master_key, &master_key_length);
+        /* Assume we have a client random if the master key is set. */
+        if (master_key_length > 0) {
+            copy_client_random(ssl, client_random);
         }
-#endif
     }
 
     /* Write the logfile when the master key is available for SSLv3/TLSv1. */
