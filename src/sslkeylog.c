@@ -80,21 +80,60 @@ static void init_keylog_file(void)
     }
 }
 
+static inline void *lookup_symbol(const char *sym)
+{
+    void *func = dlsym(RTLD_NEXT, sym);
+    /* Symbol not found, OpenSSL is not loaded (linked) so try to load it
+     * manually. This is error-prone as it depends on a fixed library name.
+     * Perhaps it should be an env name? */
+    if (!func) {
+        void *handle = dlopen(OPENSSL_SONAME, RTLD_LAZY);
+        if (!handle) {
+            fprintf(stderr, "Lookup error for %s: %s", sym, dlerror());
+            abort();
+        }
+        func = dlsym(handle, sym);
+        if (!func) {
+            fprintf(stderr, "Cannot lookup %s", sym);
+            abort();
+        }
+        dlclose(handle);
+    }
+    return func;
+}
+
 typedef struct ssl_tap_state {
     int master_key_length;
     unsigned char master_key[SSL_MAX_MASTER_KEY_LENGTH];
 
 } ssl_tap_state_t;
 
+static inline SSL_SESSION *ssl_get_session(const SSL *ssl)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    static SSL_SESSION *(*func)();
+    if (!func) {
+        func = lookup_symbol("SSL_get_session");
+    }
+    return func(ssl);
+#else
+    return ssl->session;
+#endif
+}
+
 /* Copies SSL state for later comparison in tap_ssl_key. */
 static void ssl_tap_state_init(ssl_tap_state_t *state, const SSL *ssl)
 {
-    const SSL_SESSION *session = SSL_get_session(ssl);
+    const SSL_SESSION *session = ssl_get_session(ssl);
 
     memset(state, 0, sizeof(ssl_tap_state_t));
     if (session) {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-        state->master_key_length = SSL_SESSION_get_master_key(session,
+        static size_t (*func)();
+        if (!func) {
+            func = lookup_symbol("SSL_SESSION_get_master_key");
+        }
+        state->master_key_length = func(session,
                 state->master_key, SSL_MAX_MASTER_KEY_LENGTH);
 #else
         if (session->master_key_length > 0) {
@@ -112,7 +151,7 @@ static void ssl_tap_state_init(ssl_tap_state_t *state, const SSL *ssl)
 
 static void tap_ssl_key(const SSL *ssl, ssl_tap_state_t *state)
 {
-    const SSL_SESSION *session = SSL_get_session(ssl);
+    const SSL_SESSION *session = ssl_get_session(ssl);
     unsigned char client_random[SSL3_RANDOM_SIZE];
     unsigned char master_key[SSL_MAX_MASTER_KEY_LENGTH];
     int master_key_length = 0;
@@ -148,28 +187,6 @@ static void tap_ssl_key(const SSL *ssl, ssl_tap_state_t *state)
                     master_key_length);
         }
     }
-}
-
-static inline void *lookup_symbol(const char *sym)
-{
-    void *func = dlsym(RTLD_NEXT, sym);
-    /* Symbol not found, OpenSSL is not loaded (linked) so try to load it
-     * manually. This is error-prone as it depends on a fixed library name.
-     * Perhaps it should be an env name? */
-    if (!func) {
-        void *handle = dlopen(OPENSSL_SONAME, RTLD_LAZY);
-        if (!handle) {
-            fprintf(stderr, "Lookup error for %s: %s", sym, dlerror());
-            abort();
-        }
-        func = dlsym(handle, sym);
-        if (!func) {
-            fprintf(stderr, "Cannot lookup %s", sym);
-            abort();
-        }
-        dlclose(handle);
-    }
-    return func;
 }
 
 int SSL_connect(SSL *ssl)
