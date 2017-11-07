@@ -132,10 +132,11 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DENABLE_SBC=1 \
         -DENABLE_SMI=0 \
         -DENABLE_GNUTLS=1 \
-        -DENABLE_GCRYPT=1 \
         -DENABLE_LUA=1 \
         -DCMAKE_BUILD_TYPE=Debug \
         -DDISABLE_WERROR=1 \
+        -DENABLE_ASAN=1 \
+        -DENABLE_UBSAN=1 \
         -DENABLE_EXTRA_COMPILER_WARNINGS=0 \
         $remotesrcdir \
         -DCMAKE_LIBRARY_PATH=$LIBDIR \
