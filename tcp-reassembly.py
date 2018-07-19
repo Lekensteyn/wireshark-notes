@@ -80,8 +80,8 @@ for i, (pktno, pkt) in enumerate(mypackets):
         pkt.load += pkt[Padding].load
         del pkt[Padding]
         pkt[IP].len = None
-        mypackets[i] = Ether(bytes(pkt))
-        assert mypackets[i][IP].len != 0
+        mypackets[i] = pktno, Ether(bytes(pkt))
+        assert mypackets[i][1][IP].len != 0
 
 
 class SegmentInfo(object):
