@@ -99,8 +99,8 @@ class Stream(object):
         self.nextseq = None
         self.errors = {}
 
-    def add_segment(self, pkt):
-        self.segments.append(pkt)
+    def add_segment(self, pktno, pkt):
+        self.segments.append((pktno, pkt))
         assert pkt.seq <= self.nextseq
         assert type(pkt[TCP].payload == Raw)
         self.nextseq = pkt.seq + len(pkt[TCP].payload.load)
@@ -125,11 +125,11 @@ class Stream(object):
         # Handle normal case
         if is_initial:
             # Handle initial packet
-            self.add_segment(pkt)
+            self.add_segment(pktno, pkt)
             return
         elif seq == self.nextseq:
             # Handle sequential packets
-            self.add_segment(pkt)
+            self.add_segment(pktno, pkt)
             self.process_unhandled()
             return
 
@@ -204,7 +204,7 @@ class Stream(object):
             nextseq = pkt.seq + len(pkt[TCP].load)
             if pkt.seq == self.nextseq:
                 # perfect adjacent
-                self.add_segment(pkt)
+                self.add_segment(pktno, pkt)
             else:
                 assert pkt.seq < self.nextseq
                 overlap = self.nextseq - pkt.seq
@@ -213,7 +213,7 @@ class Stream(object):
                 errors.append("Overlap: %d - %d (%d bytes)" % (pkt.seq,
                                                                self.nextseq, overlap))
                 # XXX append partial? Or leave up to reassembly API?
-                self.add_segment(pkt)
+                self.add_segment(pktno, pkt)
             remove += 1
         self.unhandled_segments = self.unhandled_segments[remove:]
         if errors:
@@ -238,6 +238,23 @@ class Stream(object):
             insertPos = i
         self.unhandled_segments.insert(insertPos, (pktno, pkt))
 
+    def get_overlaps_for(self, pktno, pkt):
+        """Find all overlapping segments for pktno."""
+        seq = pkt.seq
+        nextseq = seq + len(pkt[TCP].payload.load)
+        overlaps = []
+        for pktno2, pkt2 in self.segments:
+            if pktno2 >= pktno:
+                # only consider preceding packets that were seen
+                break
+            seq2 = pkt2.seq
+            nextseq2 = seq2 + len(pkt2[TCP].payload.load)
+            # if overlap:
+            left, right = max(seq, seq2), min(nextseq, nextseq2)
+            if left < right:
+                overlaps += ["%d:(%d,%d:%d)" % (pktno2, left, right, right - left)]
+        return ", ".join(overlaps)
+
 
 stream = Stream()
 for pktno, pkt in mypackets:
@@ -246,7 +263,10 @@ for pktno, pkt in mypackets:
     seglen = len(pkt[TCP].load)
     print("seq=%-5d nextseq=%-5d len=%-4d " %
           (pkt.seq - stream.iseq, pkt.seq + seglen - stream.iseq, seglen), end="")
-    if pktno in stream.errors:
-        print(stream.errors[pktno])
+    error = stream.errors.get(pktno)
+    if error:
+        if 'Retransmission' in error:
+            error += ' | ' + stream.get_overlaps_for(pktno, pkt)
+        print(error)
     else:
         print("OK")
