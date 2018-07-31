@@ -252,7 +252,8 @@ class Stream(object):
             # if overlap:
             left, right = max(seq, seq2), min(nextseq, nextseq2)
             if left < right:
-                overlaps += ["%d:(%d,%d:%d)" % (pktno2, left, right, right - left)]
+                overlaps += ["%d:(%d,%d:%d)" % (pktno2, left - self.iseq,
+                                                right - self.iseq, right - left)]
         return ", ".join(overlaps)
 
 
