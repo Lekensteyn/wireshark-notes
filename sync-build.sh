@@ -124,10 +124,6 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=1 \
         -DCMAKE_INSTALL_RPATH=$(printf %q "$RPATH") \
-        -DENABLE_GTK3=1 \
-        -DENABLE_PORTAUDIO=1 \
-        -DENABLE_QT5=1 \
-        -DENABLE_GEOIP=1 \
         -DENABLE_KERBEROS=1 \
         -DENABLE_SBC=1 \
         -DENABLE_SMI=0 \
@@ -163,9 +159,10 @@ trap cleanup EXIT
 round=0
 monitor_changes() {
     # Wait for changes, but ignore .git/ and vim swap files
+    # and also pytest_cache and Python 3 cache directory.
     # NOTE: you cannot add multiple --exclude options, they must be combined
     inotifywait -r -m -e close_write \
-        --exclude='/(\.[^/]+)?\.swp?.$|~$|\/.git/' \
+        --exclude='/(\.[^/]+)?\.swp?.$|~$|\/(\.git|\.pytest_cache|__pycache__)/' \
         "$localsrcdir/" |
     while read x; do
         printf '\e[36m%s\e[m\n' "Trigger $((++round)): $x" >&2
