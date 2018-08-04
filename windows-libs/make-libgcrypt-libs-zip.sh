@@ -7,13 +7,13 @@
 set -eu
 
 # Debian buster (already contains --disable-padlock-support --disable-asm)
-# https://packages.debian.org/buster/libgpg-error-mingw-w64-dev
 # https://packages.debian.org/buster/libgcrypt-mingw-w64-dev
-# https://salsa.debian.org/debian/libgpg-error/blob/debian/1.32-1/debian/rules
+# https://packages.debian.org/buster/libgpg-error-mingw-w64-dev
 # https://salsa.debian.org/gnutls-team/libgcrypt/blob/1.8.3-1/debian/rules
+# https://salsa.debian.org/debian/libgpg-error/blob/debian/1.32-1/debian/rules
 urls=(
-http://ftp.nl.debian.org/debian/pool/main/libg/libgpg-error/libgpg-error-mingw-w64-dev_1.32-1_all.deb
 http://ftp.nl.debian.org/debian/pool/main/libg/libgcrypt20/libgcrypt-mingw-w64-dev_1.8.3-1_all.deb
+http://ftp.nl.debian.org/debian/pool/main/libg/libgpg-error/libgpg-error-mingw-w64-dev_1.32-1_all.deb
 )
 version=1.8.3
 
@@ -46,13 +46,23 @@ done
 echo "Patching ssize_t in gcrypt.h"
 sed 's,typedef long ssize_t;,/*&*/,' -i usr/*/include/gcrypt.h
 
-# 4. Relocate files and shrink their size.
+# 4. Install files, shrink their size and create a .zip.
 # .def files are only needed to create .lib files. Do not bother.
 # However, import libraries (.lib) files must be present.
 for prefix in usr/*; do
-    mv -v "$prefix/lib/libgcrypt.dll.a" "$prefix/bin/libgcrypt-20.lib"
-    mv -v "$prefix/lib/libgpg-error.dll.a" "$prefix/bin/libgpg-error-0.lib"
-    strip "$prefix/bin/"*.dll
+    case $prefix in
+    usr/i686-w64-mingw32) destdir=libgcrypt-$version-win32ws ;;
+    usr/x86_64-w64-mingw32) destdir=libgcrypt-$version-win64ws ;;
+    *) continue ;;
+    esac
+    rm -rf "$destdir" "$destdir.zip"
+
+    mkdir -m755 "$destdir" "$destdir/bin"
+    cp -va "$prefix/include" "$destdir/"
+    cp -va "$prefix/lib/libgcrypt.dll.a" "$destdir/bin/libgcrypt-20.lib"
+    cp -va "$prefix/lib/libgpg-error.dll.a" "$destdir/bin/libgpg-error-0.lib"
+    cp -va "$prefix/bin/"*.dll "$destdir/bin/"
+    strip "$destdir/bin/"*.dll
 
     {
         echo "Downloaded from Debian Buster:"
@@ -62,19 +72,10 @@ for prefix in usr/*; do
         echo "- the ssize_t typedef was commented out in gcrypt.h; we define it elsewhere"
         echo "- lib/*.dll.a files were moved to bin/*.lib (including a version number based on the lib/*.dll file)"
         echo "- the .dll files were stripped (strip bin/*.dll)"
-    } | sed 's/$/\r/' > "$prefix/README.Wireshark"
-done
+    } | sed 's/$/\r/' > "$destdir/README.Wireshark"
 
-# 5. Create an archive
-files=(
-"bin/libgcrypt-20.dll"
-"bin/libgcrypt-20.lib"
-"bin/libgpg-error-0.dll"
-"bin/libgpg-error-0.lib"
-"include"
-"README.Wireshark"
-)
-bsdtar -caf "libgcrypt-$version-win32ws.zip" -C usr/i686-w64-mingw32 "${files[@]}"
-bsdtar -caf "libgcrypt-$version-win64ws.zip" -C usr/x86_64-w64-mingw32 "${files[@]}"
+    # Create zip, but without extra info such as timestamp and uid/gid (-X)
+    zip -Xr "$destdir.zip" "$destdir"
+done
 
 ls -l "libgcrypt-$version-win32ws.zip" "libgcrypt-$version-win64ws.zip"
