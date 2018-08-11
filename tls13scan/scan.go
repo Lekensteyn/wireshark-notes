@@ -59,8 +59,12 @@ func addExtension(b *cryptobyte.Builder, extType uint16, f cryptobyte.BuilderCon
 
 func buildClientHelloRecord(host string, minVersion, maxVersion uint16) ([]byte, error) {
 	var b cryptobyte.Builder
+	useTLS13x304 := maxVersion == versionTLS13
 
-	if minVersion > maxVersion && maxVersion != versionTLS13 {
+	if useTLS13x304 {
+		maxVersion = versionTLS13Draft28
+	}
+	if minVersion > maxVersion {
 		panic("failed: minVersion <= maxVersion")
 	}
 
@@ -107,11 +111,11 @@ func buildClientHelloRecord(host string, minVersion, maxVersion uint16) ([]byte,
 				addExtension(b, extSupportedVersions, func(b *cryptobyte.Builder) {
 					// Advertise all draft versions
 					b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
+						if useTLS13x304 {
+							b.AddUint16(versionTLS13)
+						}
 						for i := maxVersion; i >= minVersion; i -= 1 {
 							b.AddUint16(i)
-						}
-						if maxVersion == versionTLS13 {
-							b.AddUint16(versionTLS13)
 						}
 						// if this is not added, TLS 1.3
 						// implementations that do not
@@ -313,9 +317,12 @@ func main() {
 			break
 		}
 		fmt.Printf("%s version: %#x - %s\n", address, version, versionToString(version))
-		if maxVersion == versionTLS13 {
-			maxVersion = versionTLS13Draft28
+		if version == 0 {
+			// version is supplied by the server, must check.
+			break
 		} else {
+			// Assume that the server selected its maximum supported
+			// (draft) version. Probe for the next (lower) version.
 			maxVersion = version - 1
 		}
 	}
