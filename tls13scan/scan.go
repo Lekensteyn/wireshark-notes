@@ -26,6 +26,7 @@ const (
 	versionTLS13Draft01 uint16 = versionTLS13DraftXX | 1
 	versionTLS13Draft21 uint16 = versionTLS13DraftXX | 21
 	versionTLS13Draft28 uint16 = versionTLS13DraftXX | 28
+	versionTLS13        uint16 = 0x304
 
 	TLS_RSA_WITH_AES_128_CBC_SHA            uint16 = 0x002f
 	TLS_AES_128_GCM_SHA256                  uint16 = 0x1301
@@ -59,7 +60,7 @@ func addExtension(b *cryptobyte.Builder, extType uint16, f cryptobyte.BuilderCon
 func buildClientHelloRecord(host string, minVersion, maxVersion uint16) ([]byte, error) {
 	var b cryptobyte.Builder
 
-	if minVersion > maxVersion {
+	if minVersion > maxVersion && maxVersion != versionTLS13 {
 		panic("failed: minVersion <= maxVersion")
 	}
 
@@ -108,6 +109,9 @@ func buildClientHelloRecord(host string, minVersion, maxVersion uint16) ([]byte,
 					b.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
 						for i := maxVersion; i >= minVersion; i -= 1 {
 							b.AddUint16(i)
+						}
+						if maxVersion == versionTLS13 {
+							b.AddUint16(versionTLS13)
 						}
 						// if this is not added, TLS 1.3
 						// implementations that do not
@@ -254,6 +258,8 @@ func versionToString(version uint16) string {
 		return "TLS 1.1"
 	case versionTLS12:
 		return "TLS 1.2"
+	case versionTLS13:
+		return "TLS 1.3"
 	default:
 		if (version & versionTLS13DraftXX) == versionTLS13DraftXX {
 			return fmt.Sprintf("TLS 1.3 (draft %d)", version&0xff)
@@ -299,14 +305,18 @@ func main() {
 
 	// prepare client hello
 	minVersion := versionTLS13Draft01
-	maxVersion := versionTLS13Draft28
-	for minVersion <= maxVersion {
+	maxVersion := versionTLS13
+	for minVersion <= maxVersion || maxVersion == versionTLS13 {
 		version, err := queryVersion(address, sniHost, minVersion, maxVersion)
 		if err != nil {
 			fmt.Printf("%s query (max version: %s) failed: %s\n", address, versionToString(maxVersion), err)
 			break
 		}
 		fmt.Printf("%s version: %#x - %s\n", address, version, versionToString(version))
-		maxVersion = version - 1
+		if maxVersion == versionTLS13 {
+			maxVersion = versionTLS13Draft28
+		} else {
+			maxVersion = version - 1
+		}
 	}
 }
