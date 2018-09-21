@@ -295,7 +295,9 @@ func queryVersion(address, sniHost string, minVersion, maxVersion uint16) (uint1
 
 func main() {
 	var address string
+	var sni string
 	flag.StringVar(&address, "connect", "localhost", "hostname[:port] to connect to")
+	flag.StringVar(&sni, "servername", "", "Set SNI instead of using the -connect host")
 	flag.Parse()
 
 	if !strings.Contains(address, ":") {
@@ -305,6 +307,9 @@ func main() {
 	sniHost, _, err := net.SplitHostPort(address)
 	if err != nil {
 		panic(err)
+	}
+	if sni != "" {
+		sniHost = sni
 	}
 
 	// prepare client hello
