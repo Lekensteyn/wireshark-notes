@@ -27,7 +27,7 @@ parser.add_argument("project",
                     help="Account name plus project slug (e.g. Lekensteyn/wireshark)")
 
 base = "https://ci.appveyor.com/api"
-history_url = "%s/projects/{project}/history?recordsNumber=1000" % base
+history_url = "%s/projects/{project}/history" % base
 build_url = "%s/builds/{buildId}" % base
 
 args = parser.parse_args()
@@ -39,19 +39,38 @@ if args.token.startswith("v2."):
 headers = {
     "Authorization": "Bearer %s" % args.token,
 }
-# Retrieve builds for the project
-r = requests.get(history_url.format(project=args.project), headers=headers)
-r.raise_for_status()  # Does the project exist?
-builds = r.json()["builds"]
-count = len(builds)
-builds = builds[args.max_builds:]
-if not builds:
-    print("Found %d builds, nothing to remove" % count)
-else:
-    print("About to remove %d builds" % len(builds))
-    for build in builds:
-        print("Removing %d %s" % (build["buildId"], build["message"]))
-        if not args.dry_run:
-            r = requests.delete(build_url.format(buildId=build["buildId"]),
-                                headers=headers)
-            r.raise_for_status()  # If this fails, perhaps token is invalid.
+params = {
+    "recordsNumber": "100",
+}
+skipped = 0
+while True:
+    # Retrieve builds for the project
+    r = requests.get(history_url.format(project=args.project), params=params,
+                     headers=headers)
+    r.raise_for_status()  # Does the project exist?
+    builds = r.json()["builds"]
+    count = len(builds)
+    # Pagination: start after this number (going from new to old)
+    if builds:
+        params["startBuildId"] = builds[-1]["buildId"]
+        print("Last buildId is %d" % params["startBuildId"])
+    skip = max(0, min(args.max_builds - skipped, count))
+    if skip:
+        builds = builds[skip:]
+        skipped += skip
+        print("Skipped %d recent builds" % skip)
+    if not builds:
+        # Possibly reached the end of the list with nothing to skip
+        if skip != 100:
+            print("Found %d builds, nothing to remove" % count)
+    else:
+        print("About to remove %d builds" % len(builds))
+        for build in builds:
+            print("Removing %d %s" % (build["buildId"], build["message"]))
+            if not args.dry_run:
+                r = requests.delete(build_url.format(buildId=build["buildId"]),
+                                    headers=headers)
+                r.raise_for_status()  # Token valid and authorized for project?
+    # 100 seems to be the pagination limit, if there are less, then we are done.
+    if count != 100:
+        break
