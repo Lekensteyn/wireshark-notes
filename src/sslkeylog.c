@@ -117,26 +117,35 @@ static void init_keylog_file(void)
     }
 }
 
-static inline void *lookup_symbol(const char *sym)
+static inline void *try_lookup_symbol(const char *sym, int optional)
 {
     void *func = dlsym(RTLD_NEXT, sym);
+    if (!func && optional && dlsym(RTLD_NEXT, "SSL_new")) {
+        /* Symbol not found, but an old OpenSSL version was actually loaded. */
+        return NULL;
+    }
     /* Symbol not found, OpenSSL is not loaded (linked) so try to load it
      * manually. This is error-prone as it depends on a fixed library name.
      * Perhaps it should be an env name? */
     if (!func) {
         void *handle = dlopen(OPENSSL_SONAME, RTLD_LAZY);
         if (!handle) {
-            fprintf(stderr, "Lookup error for %s: %s", sym, dlerror());
+            fprintf(stderr, "Lookup error for %s: %s\n", sym, dlerror());
             abort();
         }
         func = dlsym(handle, sym);
-        if (!func) {
-            fprintf(stderr, "Cannot lookup %s", sym);
+        if (!func && !optional) {
+            fprintf(stderr, "Cannot lookup %s\n", sym);
             abort();
         }
         dlclose(handle);
     }
     return func;
+}
+
+static inline void *lookup_symbol(const char *sym)
+{
+    return try_lookup_symbol(sym, 0);
 }
 
 #ifndef NO_OPENSSL_110_SUPPORT
@@ -195,24 +204,19 @@ static void copy_client_random(const SSL *ssl, unsigned char *client_random)
 }
 
 /* non-NULL if the new OpenSSL 1.1.1 keylog API is supported. */
-static void *new_keylog_api(void)
+static int supports_keylog_api(void)
 {
-    static void *set_keylog_cb = (void *)-1;
-    if (set_keylog_cb == (void *)-1) {
-        /*
-         * Assume OpenSSL is already loaded and try to locate the OpenSSL 1.1.1
-         * keylog API. Do not fallback to lookup_symbol as that could result in
-         * loading a different, incompatible version of libssl.so.
-         */
-        set_keylog_cb = dlsym(RTLD_NEXT, "SSL_CTX_set_keylog_callback");
+    static int supported = -1;
+    if (supported == -1) {
+        supported = try_lookup_symbol("SSL_CTX_set_keylog_callback", 1) != NULL;
     }
-    return set_keylog_cb;
+    return supported;
 }
 
 /* Copies SSL state for later comparison in tap_ssl_key. */
 static void ssl_tap_state_init(ssl_tap_state_t *state, const SSL *ssl)
 {
-    if (new_keylog_api()) {
+    if (supports_keylog_api()) {
         /* Favor using the callbacks API to extract secrets. */
         return;
     }
@@ -231,7 +235,7 @@ static void ssl_tap_state_init(ssl_tap_state_t *state, const SSL *ssl)
 
 static void tap_ssl_key(const SSL *ssl, ssl_tap_state_t *state)
 {
-    if (new_keylog_api()) {
+    if (supports_keylog_api()) {
         /* Favor using the callbacks API to extract secrets. */
         return;
     }
@@ -347,7 +351,7 @@ SSL *SSL_new(SSL_CTX *ctx)
         set_keylog_cb = lookup_symbol("SSL_CTX_set_keylog_callback");
 #else  /* ! NO_OPENSSL_110_SUPPORT */
         /* May be NULL if used with an older OpenSSL runtime library. */
-        set_keylog_cb = new_keylog_api();
+        set_keylog_cb = try_lookup_symbol("SSL_CTX_set_keylog_callback", 1);
 #endif /* ! NO_OPENSSL_110_SUPPORT */
     }
     if (set_keylog_cb) {
