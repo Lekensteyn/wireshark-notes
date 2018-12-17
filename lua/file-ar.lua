@@ -42,6 +42,35 @@ local reloc_types_x64 = {
     [0x000F] = "IMAGE_REL_AMD64_PAIR",
     [0x0010] = "IMAGE_REL_AMD64_SSPAN32",
 }
+local storage_classes = {
+    [255] = "IMAGE_SYM_CLASS_END_OF_FUNCTION",
+    [0] = "IMAGE_SYM_CLASS_NULL",
+    [1] = "IMAGE_SYM_CLASS_AUTOMATIC",
+    [2] = "IMAGE_SYM_CLASS_EXTERNAL",
+    [3] = "IMAGE_SYM_CLASS_STATIC",
+    [4] = "IMAGE_SYM_CLASS_REGISTER",
+    [5] = "IMAGE_SYM_CLASS_EXTERNAL_DEF",
+    [6] = "IMAGE_SYM_CLASS_LABEL",
+    [7] = "IMAGE_SYM_CLASS_UNDEFINED_LABEL",
+    [8] = "IMAGE_SYM_CLASS_MEMBER_OF_STRUCT",
+    [9] = "IMAGE_SYM_CLASS_ARGUMENT",
+    [10] = "IMAGE_SYM_CLASS_STRUCT_TAG",
+    [11] = "IMAGE_SYM_CLASS_MEMBER_OF_UNION",
+    [12] = "IMAGE_SYM_CLASS_UNION_TAG",
+    [13] = "IMAGE_SYM_CLASS_TYPE_DEFINITION",
+    [14] = "IMAGE_SYM_CLASS_UNDEFINED_STATIC",
+    [15] = "IMAGE_SYM_CLASS_ENUM_TAG",
+    [16] = "IMAGE_SYM_CLASS_MEMBER_OF_ENUM",
+    [17] = "IMAGE_SYM_CLASS_REGISTER_PARAM",
+    [18] = "IMAGE_SYM_CLASS_BIT_FIELD",
+    [100] = "IMAGE_SYM_CLASS_BLOCK",
+    [101] = "IMAGE_SYM_CLASS_FUNCTION",
+    [102] = "IMAGE_SYM_CLASS_END_OF_STRUCT",
+    [103] = "IMAGE_SYM_CLASS_FILE",
+    [104] = "IMAGE_SYM_CLASS_SECTION",
+    [105] = "IMAGE_SYM_CLASS_WEAK_EXTERNAL",
+    [107] = "IMAGE_SYM_CLASS_CLR_TOKEN",
+}
 
 local proto_ar = Proto.new("ar_archive", "ar Archive")
 -- More are defined at https://docs.microsoft.com/en-us/windows/desktop/Debug/pe-format#machine-types
@@ -66,7 +95,7 @@ local hf = {
     l2_file_offset  = ProtoField.uint32("ar.l2.file_offset", "File offset", base.HEX_DEC, nil, nil, "File offset to archive member headers"),
     l2_index        = ProtoField.uint32("ar.l2.index", "Index", base.DEC, nil, nil, "Index into offsets array"),
     l2_symbol_name  = ProtoField.stringz("ar.l2.symbol_name", "Symbol Name"),
-    ln_member_name  = ProtoField.stringz("ar.ln.member_name", "Member Name"),
+    ln_member_name  = ProtoField.string("ar.ln.member_name", "Member Name"),
     import_header      = ProtoField.none("ar.import_header", "Import Header"),
     imp_sig1        = ProtoField.none("ar.imp.sig1", "Import Header Sig1"),
     imp_sig2        = ProtoField.none("ar.imp.sig1", "Import Header Sig2"),
@@ -112,7 +141,7 @@ local hf = {
     coff_sym_value          = ProtoField.uint32("ar.coff.sym.value", "Value", base.HEX_DEC),
     coff_sym_section_number = ProtoField.uint16("ar.coff.sym.section_number", "Section Number"),
     coff_sym_type           = ProtoField.uint16("ar.coff.sym.type", "Type", base.HEX, {[0] = "not a function", [0x20] = "function"}),
-    coff_sym_storage_class  = ProtoField.uint8("ar.coff.sym.storage_class", "Storage Class"),
+    coff_sym_storage_class  = ProtoField.uint8("ar.coff.sym.storage_class", "Storage Class", base.DEC, storage_classes),
     coff_sym_number_of_aux_symbols = ProtoField.uint8("ar.coff.sym.number_of_aux_symbols", "Number of auxilliary symbols"),
 
     -- XXX expert info?
@@ -177,14 +206,25 @@ local function dissect_coff_second_linker_member(tvb, offset, file_size, tree, s
 end
 
 local function dissect_coff_longnames_member(tvb, offset, file_size, tree, member_names_map)
-    local offset_begin = offset
-    local offset_end = offset + file_size
-    while offset < offset_end do
-        local namelen = tvb(offset):strsize()
-        local name_tvb = tvb(offset, namelen)
-        tree:add(hf.ln_member_name, name_tvb)
-        member_names_map[offset - offset_begin] = name_tvb:stringz()
-        offset = offset + namelen
+    -- According to the Microsoft PE Format documentation, strings are
+    -- terminated by a NULL terminator (presumably '\0'). However, llvm-dlltool
+    -- (via lib/Object/ArchiveWriter.cpp) ends a member name with "/\n".
+    local strings = tvb:raw(offset, file_size)
+    local term = "\0"
+    local termlen = 1
+    if strings:find("/\n", pos, true) then
+        term = "/\n"
+        termlen = 2
+    end
+    local pos = 1
+    while true do
+        local nextpos = strings:find(term, pos, true)
+        if not nextpos then
+            break
+        end
+        tree:add(hf.ln_member_name, tvb(offset + pos - 1, nextpos - pos))
+        member_names_map[pos - 1] = strings:sub(pos, nextpos - 1)
+        pos = nextpos + termlen
     end
 end
 
@@ -349,13 +389,13 @@ local function get_coff_type(file_id, member_number)
         return "First Linker Member", dissect_coff_first_linker_member
     elseif member_number == 2 and file_id == "/" then
         return "Second Linker Member", dissect_coff_second_linker_member
-    elseif member_number == 3 and file_id == "//" then
+    elseif member_number <= 3 and file_id == "//" then
         -- The archive member is the longnames member, which consists of a
         -- series of null-terminated ASCII strings. The longnames member is the
         -- third archive member and must always be present even if the contents
         -- are empty.
         return "Longnames Member", dissect_coff_longnames_member
-    elseif member_number >= 4 and string.match(file_id, "^/%d+$") then
+    elseif member_number >= 3 and string.match(file_id, "^/%d+$") then
         -- The name of the archive member is located at offset n within the
         -- longnames member. The number n is the decimal representation of the
         -- offset. For example: "/26" indicates that the name of the archive
@@ -388,9 +428,7 @@ local function dissect_one(tvb, offset, pinfo, tree, member_number, symbols_map,
         subtree:set_text(entry_label)
         if data_dissector == dissect_coff_archive_member then
             local member_name = member_names_map[tonumber(file_id:sub(2))]
-            if member_name then
-                subtree:append_text(string.format(" (%s)", member_name))
-            end
+            subtree:append_text(string.format(" (%s)", member_name or file_id:gsub("/$", "")))
         end
     else
         subtree:append_text(string.format(": %s", file_id))
@@ -401,7 +439,7 @@ local function dissect_one(tvb, offset, pinfo, tree, member_number, symbols_map,
         subtree:append_text(string.format(" for %s", syms))
     end
     htree:add(hf.file_id, tvb(offset, 16))
-    htree:add(hf.file_mtime, tvb(offset + 16, 12), NSTime(tvb:raw(offset + 16, 12)))
+    htree:add(hf.file_mtime, tvb(offset + 16, 12), NSTime(tonumber(tvb:raw(offset + 16, 12))))
     htree:add(hf.owner_id, tvb(offset + 28, 6))
     htree:add(hf.group_id, tvb(offset + 34, 6))
     htree:add(hf.file_mode, tvb(offset + 40, 8))
