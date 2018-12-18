@@ -7,6 +7,7 @@
 -- https://docs.microsoft.com/en-us/windows/desktop/Debug/pe-format#archive-library-file-format
 --
 
+-- More are defined at https://docs.microsoft.com/en-us/windows/desktop/Debug/pe-format#machine-types
 local machine_types = {
     [0x0000] = "Unknown",
     [0x014c] = "i386",
@@ -71,9 +72,24 @@ local storage_classes = {
     [105] = "IMAGE_SYM_CLASS_WEAK_EXTERNAL",
     [107] = "IMAGE_SYM_CLASS_CLR_TOKEN",
 }
+local subsystem_values = {
+    [0] = "IMAGE_SUBSYSTEM_UNKNOWN",
+    [1] = "IMAGE_SUBSYSTEM_NATIVE",
+    [2] = "IMAGE_SUBSYSTEM_WINDOWS_GUI",
+    [3] = "IMAGE_SUBSYSTEM_WINDOWS_CUI",
+    [5] = "IMAGE_SUBSYSTEM_OS2_CUI",
+    [7] = "IMAGE_SUBSYSTEM_POSIX_CUI",
+    [8] = "IMAGE_SUBSYSTEM_NATIVE_WINDOWS",
+    [9] = "IMAGE_SUBSYSTEM_WINDOWS_CE_GUI",
+    [10] = "IMAGE_SUBSYSTEM_EFI_APPLICATION",
+    [11] = "IMAGE_SUBSYSTEM_EFI_BOOT_",
+    [12] = "IMAGE_SUBSYSTEM_EFI_RUNTIME_",
+    [13] = "IMAGE_SUBSYSTEM_EFI_ROM",
+    [14] = "IMAGE_SUBSYSTEM_XBOX",
+    [16] = "IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION",
+}
 
 local proto_ar = Proto.new("ar_archive", "ar Archive")
--- More are defined at https://docs.microsoft.com/en-us/windows/desktop/Debug/pe-format#machine-types
 local hf = {
     header      = ProtoField.none("ar.header", "Archive Header"),
     magic       = ProtoField.string("ar.magic", "Magic"),
@@ -148,6 +164,50 @@ local hf = {
     unprocessed = ProtoField.bytes("ar.unprocessed", "Unprocessed Data"),
 }
 proto_ar.fields = hf
+
+local proto_pe = Proto.new("pe", "Portable Executablear Archive")
+local pe_hf = {
+    dos                 = ProtoField.none("pe.dos", "DOS Header"),
+    dos_magic           = ProtoField.none("pe.dos.magic", "DOS .EXE header"),
+    dos_lfanew          = ProtoField.uint32("pe.dos.lfanew", "File address of new exe header", base.HEX_DEC),
+    dos_stub            = ProtoField.bytes("pe.dos.stub", "DOS Stub"),
+    magic               = ProtoField.none("pe.magic", "PE Signature"),
+    opth                = ProtoField.none("pe.opth", "Optional Header"),
+    opth_standard       = ProtoField.none("pe.opth.standard", "Optional Header Standard Fields"),
+    opth_magic          = ProtoField.uint16("pe.opth.magic", "Magic", base.HEX, {[0x10b] = "PE32", [0x20b] = "PE32+"}),
+    opth_major_linker_version = ProtoField.uint8("pe.opth.major_linker_version", "Major Linker Version"),
+    opth_minor_linker_version = ProtoField.uint8("pe.opth.major_linker_version", "Major Linker Version"),
+    opth_size_of_code   = ProtoField.uint32("pe.opth.size_of_code", "Size of code sections"),
+    opth_size_of_data   = ProtoField.uint32("pe.opth.size_of_data", "Size of data sections"),
+    opth_size_of_bss    = ProtoField.uint32("pe.opth.size_of_bss", "Size of BSS sections"),
+    opth_entrypoint     = ProtoField.uint32("pe.opth.entrypoint", "Address of entry point", base.HEX),
+    opth_base_of_code   = ProtoField.uint32("pe.opth.base_of_code", "BaseOfCode", base.HEX),
+    opth_base_of_data   = ProtoField.uint32("pe.opth.base_of_data", "BaseOfData", base.HEX),
+    opth_windows_specific   = ProtoField.none("pe.opth.windows_specific", "Optional Header Windows-Specific Fields"),
+    opth_image_base         = ProtoField.uint64("pe.opth.image_base", "ImageBase", base.HEX),
+    opth_section_alignment  = ProtoField.uint16("pe.opth.section_alignment", "SectionAlignment", base.HEX_DEC),
+    opth_file_alignment     = ProtoField.uint16("pe.opth.file_alignment", "FileAlignment", base.HEX_DEC),
+    opth_major_osversion    = ProtoField.uint16("pe.opth.major_osversion", "MajorOperatingSystemVersion"),
+    opth_minor_osversion    = ProtoField.uint16("pe.opth.minor_osversion", "MinorOperatingSystemVersion"),
+    opth_major_imversion    = ProtoField.uint16("pe.opth.major_imversion", "MajorImageVersion"),
+    opth_minor_imversion    = ProtoField.uint16("pe.opth.minor_imversion", "MinorImageVersion"),
+    opth_major_ssversion    = ProtoField.uint16("pe.opth.major_ssversion", "MajorSubsystemVersion"),
+    opth_minor_ssversion    = ProtoField.uint16("pe.opth.minor_ssversion", "MinorSubsystemVersion"),
+    opth_win32_version      = ProtoField.uint32("pe.opth.win32_version", "Win32VersionValue "),
+    opth_size_of_image      = ProtoField.uint32("pe.opth.size_of_image", "SizeOfImage"),
+    opth_size_of_headers    = ProtoField.uint32("pe.opth.size_of_headers", "SizeOfHeaders"),
+    opth_checksum           = ProtoField.uint32("pe.opth.checksum", "Checksum", base.HEX),
+    opth_subsystem          = ProtoField.uint16("pe.opth.subsystem", "Subsystem", base.DEC, subsystem_values),
+    opth_dll_characteristics    = ProtoField.uint16("pe.opth.dll_characteristics", "DllCharacteristics"),
+    opth_size_of_stack_reserve  = ProtoField.uint64("pe.opth.size_of_stack_reserve", "SizeOfStackReserve", base.HEX_DEC),
+    opth_size_of_stack_commit   = ProtoField.uint64("pe.opth.size_of_stack_commit", "SizeOfStackCommit", base.HEX_DEC),
+    opth_size_of_heap_reserve   = ProtoField.uint64("pe.opth.size_of_heap_reserve", "SizeOfHeapReserve", base.HEX_DEC),
+    opth_size_of_heap_commit    = ProtoField.uint64("pe.opth.size_of_heap_commit", "SizeOfHeapCommit", base.HEX_DEC),
+    opth_loader_flags       = ProtoField.uint32("pe.opth.loader_flags", "LoaderFlags", base.HEX),
+    opth_number_of_rva_and_sizes = ProtoField.uint32("pe.opth.number_of_rva_and_sizes", "NumberOfRvaAndSizes"),
+    opth_data_directories   = ProtoField.none("pe.opth.data_directories", "Optional Header Data Directories"),
+}
+proto_pe.fields = pe_hf
 
 local function dissect_coff_first_linker_member(tvb, offset, file_size, tree, symbols_map)
     local number_of_symbols = tvb(offset, 4):uint()
@@ -340,8 +400,72 @@ local function dissect_coff_symbol_record(tvb, offset, tree, symbol_index, strin
     subtree:add_le(hf.coff_sym_number_of_aux_symbols, tvb(offset + 17, 1))
 end
 
-local function dissect_coff_file_header(tvb, offset, file_size, tree)
-    local coff_start = offset
+local function dissect_pe_optional_header(tvb, offset, opt_header_size, tree)
+    local subtree = tree:add(pe_hf.opth, tvb(offset, opt_header_size))
+    local magic  = tvb(offset, 2):le_uint()
+    local is_pe32 = magic == 0x10b
+    local is_pe32p = magic == 0x20b
+    if is_pe32 then
+        subtree:append_text(" (PE32)")
+    elseif is_pe32p then
+        subtree:append_text(" (PE32+)")
+    end
+    -- Fields Common for all COFF implementations.
+    local stdtree = subtree:add(pe_hf.opth_standard, tvb(offset, 24))
+    stdtree:add_le(pe_hf.opth_magic, tvb(offset, 2))
+    stdtree:add_le(pe_hf.opth_major_linker_version, tvb(offset + 2, 1))
+    stdtree:add_le(pe_hf.opth_minor_linker_version, tvb(offset + 3, 1))
+    stdtree:add_le(pe_hf.opth_size_of_code, tvb(offset + 4, 4))
+    stdtree:add_le(pe_hf.opth_size_of_data, tvb(offset + 8, 4))
+    stdtree:add_le(pe_hf.opth_size_of_bss, tvb(offset + 12, 4))
+    stdtree:add_le(pe_hf.opth_entrypoint, tvb(offset + 16, 4))
+    stdtree:add_le(pe_hf.opth_base_of_code, tvb(offset + 20, 4))
+    if is_pe32 then
+        stdtree:add_le(pe_hf.opth_base_of_data, tvb(offset + 24, 4))
+        stdtree:set_len(28)
+    end
+    if is_pe32 or is_pe32p then
+        local psize, winoffset, winlen
+        if is_pe32 then
+            psize = 4
+            winoffset = offset + 28
+            winlen = 68
+        else
+            psize = 8
+            winoffset = offset + 24
+            winlen = 88
+        end
+        -- Windows-specific fields
+        local wintree = subtree:add(pe_hf.opth_windows_specific, tvb(winoffset, winlen))
+        wintree:add_le(pe_hf.opth_image_base, tvb(winoffset, psize))
+        wintree:add_le(pe_hf.opth_section_alignment, tvb(offset + 32, 4))
+        wintree:add_le(pe_hf.opth_file_alignment, tvb(offset + 36, 4))
+        wintree:add_le(pe_hf.opth_major_osversion, tvb(offset + 40, 2))
+        wintree:add_le(pe_hf.opth_minor_osversion, tvb(offset + 42, 2))
+        wintree:add_le(pe_hf.opth_major_imversion, tvb(offset + 44, 2))
+        wintree:add_le(pe_hf.opth_minor_imversion, tvb(offset + 46, 2))
+        wintree:add_le(pe_hf.opth_major_ssversion, tvb(offset + 48, 2))
+        wintree:add_le(pe_hf.opth_minor_ssversion, tvb(offset + 50, 2))
+        wintree:add_le(pe_hf.opth_win32_version, tvb(offset + 52, 4))
+        wintree:add_le(pe_hf.opth_size_of_image, tvb(offset + 56, 4))
+        wintree:add_le(pe_hf.opth_size_of_headers, tvb(offset + 60, 4))
+        wintree:add_le(pe_hf.opth_checksum, tvb(offset + 64, 4))
+        wintree:add_le(pe_hf.opth_subsystem, tvb(offset + 68, 2))
+        wintree:add_le(pe_hf.opth_dll_characteristics, tvb(offset + 70, 2))
+        wintree:add_le(pe_hf.opth_size_of_stack_reserve, tvb(offset + 72, psize))
+        wintree:add_le(pe_hf.opth_size_of_stack_commit, tvb(offset  + 72 + psize, psize))
+        wintree:add_le(pe_hf.opth_size_of_heap_reserve, tvb(offset + 72 + 2 * psize, psize))
+        wintree:add_le(pe_hf.opth_size_of_heap_commit, tvb(offset + 72 + 3 * psize, psize))
+        local lf_offset = offset + 72 + 4 * psize
+        wintree:add_le(pe_hf.opth_loader_flags, tvb(lf_offset, 4))
+        wintree:add_le(pe_hf.opth_number_of_rva_and_sizes, tvb(lf_offset + 4, 4))
+        -- Data directories.
+        local ddoffset = winoffset + winlen
+        subtree:add(pe_hf.opth_data_directories, tvb(ddoffset, 128))
+    end
+end
+
+local function dissect_coff_file_header(tvb, offset, file_size, tree, coff_start)
     local subtree = tree:add(hf.coff_file_header, tvb(offset, 20))
     local machine = tvb(offset, 2):le_uint()
     subtree:add_le(hf.coff_machine, tvb(offset, 2))
@@ -352,9 +476,14 @@ local function dissect_coff_file_header(tvb, offset, file_size, tree)
     subtree:add_le(hf.coff_symbol_table_ptr, tvb(offset + 8, 4))
     local number_of_symbols = tvb(offset + 12, 4):le_uint()
     subtree:add_le(hf.coff_number_of_symbols, tvb(offset + 12, 4))
+    local opt_header_size = tvb(offset + 16, 2):le_uint()
     subtree:add_le(hf.coff_opt_header_size, tvb(offset + 16, 2))
     subtree:add_le(hf.coff_characteristics, tvb(offset + 18, 2))
     offset = offset + 20
+    if opt_header_size ~= 0 then
+        dissect_pe_optional_header(tvb, offset, opt_header_size, tree)
+    end
+    offset = offset + opt_header_size
     for i = 1, number_of_sections do
         offset = dissect_coff_section(tvb, offset, tree, machine, i, coff_start)
     end
@@ -374,7 +503,7 @@ local function dissect_coff_archive_member(tvb, offset, file_size, tree)
     if tvb(offset, 4):le_uint() == 0xffff0000 then
         offset = dissect_coff_import_header(tvb, offset, file_size, tree)
     else
-        offset = dissect_coff_file_header(tvb, offset, file_size, tree)
+        offset = dissect_coff_file_header(tvb, offset, file_size, tree, offset)
     end
     if offset < offset_end then
         tree:add(hf.unprocessed, tvb(offset, offset_end - offset))
@@ -490,25 +619,67 @@ local function ar_heur(tvb, pinfo, tree)
     return true
 end
 
--- Register MIME types in case an ar file appears over HTTP.
+function proto_pe.dissector(tvb, pinfo, tree)
+    pinfo.cols.protocol = "PE"
+    --pinfo.cols.info = ""
+
+    local dos = tree:add(pe_hf.dos, tvb(0, 64))
+    dos:add(pe_hf.dos_magic, tvb(0, 2))
+    dos:add_le(pe_hf.dos_lfanew, tvb(60, 4))
+    local lfanew = tvb(60, 4):le_uint()
+    if lfanew > 64 then
+        tree:add(pe_hf.dos_stub, tvb(64, lfanew - 64))
+    end
+
+    tree:add(pe_hf.magic, tvb(lfanew, 4))
+    local offset = lfanew + 4
+    offset = dissect_coff_file_header(tvb, offset, tvb:len() - offset, tree, 0)
+    return offset
+end
+
+local function pe_heur(tvb, pinfo, tree)
+    if tvb:len() < 64 or tvb:raw(0, 2) ~= "MZ" then
+        return false
+    end
+    local lfanew = tvb(60, 4):le_uint()
+    if tvb:len() < lfanew + 4 or tvb:raw(lfanew, 4) ~= "PE\0\0" then
+        return false
+    end
+
+    proto_pe.dissector(tvb, pinfo, tree)
+    return true
+end
+
+-- Register MIME types in case an the file appears over HTTP.
 DissectorTable.get("media_type"):add("application/x-archive", proto_ar)
+DissectorTable.get("media_type"):add("application/x-dosexec", proto_pe)
 
 -- Ensure that files can directly be opened (after any FileHandler has accepted
 -- it, see below).
 proto_ar:register_heuristic("wtap_file", ar_heur)
+proto_pe:register_heuristic("wtap_file", pe_heur)
 
 
 --
--- File handler (for directly interpreting opening a Zip file in Wireshark)
--- Actually, all it does is recognizing a Zip file and passing one packet to the
--- MIME dissector.
+-- File handler (for directly interpreting opening an ar/PE file in Wireshark)
+-- Actually, all it does is recognizing the file format and passing one packet
+-- to the MIME dissector.
 --
 
-local ar_fh = FileHandler.new("ar", "ar", ".LIB and .a archive file reader", "rms")
+local ar_fh = FileHandler.new("ar", "ar", ".LIB and .a archive and PE (exe/dll) file reader", "rms")
 
 -- Check if file is really a ar file (return true if it is)
 function ar_fh.read_open(file, cinfo)
-    if file:read(8) ~= "!<arch>\n" then
+    local buf = file:read(8)
+    -- ar format?
+    local ok = buf == "!<arch>\n"
+    -- PE format? (64 bytes IMAGE_DOS_HEADER starting with "MZ" magic and
+    -- four bytes at the end of this header pointing to the PE start).
+    if not ok and buf:sub(1, 2) == "MZ" and file:seek("set", 60) then
+        local peoff = Struct.unpack("<I4", file:read(4))
+        ok = peoff and file:seek("set", peoff) and file:read(4) == "PE\0\0"
+    end
+    if not ok then
         return false
     end
 
@@ -531,7 +702,7 @@ local function ar_fh_read(file, cinfo, finfo)
     local p = cinfo.private_table
     local curpos = file:seek("cur")
 
-    -- Fal on EOF
+    -- Fail on EOF
     if curpos >= p.endpos then return false end
 
     finfo.original_length = p.endpos - curpos
@@ -556,6 +727,6 @@ function ar_fh.seek_read(file, cinfo, finfo, offset)
 end
 
 -- Hints for when to invoke this dissector.
-ar_fh.extensions = "lib;a"
+ar_fh.extensions = "lib;a;dll;exe"
 
 register_filehandler(ar_fh)
