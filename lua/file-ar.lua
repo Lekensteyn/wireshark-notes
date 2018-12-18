@@ -511,7 +511,12 @@ local function dissect_coff_archive_member(tvb, offset, file_size, tree)
 end
 
 
-local function get_coff_type(file_id, member_number)
+local function get_coff_type(file_id, member_number, obj_index_adjust)
+    if member_number <= 2 and file_id == "/" and not obj_index_adjust[0] then
+        -- Assume COFF Linker archive format, set a sentinel value will be
+        -- replaced later while processing regular archive members.
+        obj_index_adjust[0] = -1
+    end
     if member_number == 1 and file_id == "/" then
         -- The archive member is one of the two linker members.
         -- Both of the linker members have this name.
@@ -524,22 +529,19 @@ local function get_coff_type(file_id, member_number)
         -- third archive member and must always be present even if the contents
         -- are empty.
         return "Longnames Member", dissect_coff_longnames_member
-    elseif member_number >= 3 and string.match(file_id, "^/%d+$") then
-        -- The name of the archive member is located at offset n within the
-        -- longnames member. The number n is the decimal representation of the
-        -- offset. For example: "/26" indicates that the name of the archive
-        -- member is located 26 bytes beyond the beginning of the longnames
-        -- member contents.
-        local label = string.format("OBJ File %d Contents", member_number - 3)
+    end
+    if obj_index_adjust[0] then
+        if obj_index_adjust[0] == -1 then
+            obj_index_adjust[0] = member_number - 1
+        end
+        local label = string.format("OBJ File %d", member_number - obj_index_adjust[0])
         return label, dissect_coff_archive_member
     else
-        -- XXX is this correct? This seems true for MinGW .dll.a files.
-        local label = string.format("OBJ %d", member_number - 2)
-        return label, dissect_coff_archive_member
+        return nil, nil
     end
 end
 
-local function dissect_one(tvb, offset, pinfo, tree, member_number, symbols_map, member_names_map)
+local function dissect_one(tvb, offset, pinfo, tree, member_number, symbols_map, member_names_map, obj_index_adjust)
     -- File header (based on the Wikipedia article):
     --  0   16  File identifier             ASCII
     -- 16   12  File modification timestamp Decimal
@@ -552,16 +554,15 @@ local function dissect_one(tvb, offset, pinfo, tree, member_number, symbols_map,
     local htree = subtree:add(hf.header, tvb(offset, 60))
     local file_id = tvb:raw(offset, 16):gsub(" +$", "")
     htree:append_text(string.format(": id=%s", file_id))
-    local entry_label, data_dissector = get_coff_type(file_id, member_number)
+    local entry_label, data_dissector = get_coff_type(file_id, member_number, obj_index_adjust)
     if entry_label then
         subtree:set_text(entry_label)
-        if data_dissector == dissect_coff_archive_member then
-            local member_name = member_names_map[tonumber(file_id:sub(2))]
-            subtree:append_text(string.format(" (%s)", member_name or file_id:gsub("/$", "")))
-        end
-    else
-        subtree:append_text(string.format(": %s", file_id))
     end
+    local member_name
+    if string.match(file_id, "^/%d+$") then
+        member_name = member_names_map[tonumber(file_id:sub(2))]
+    end
+    subtree:append_text(string.format(" (%s)", member_name or file_id:gsub("/$", "")))
     local sym = symbols_map[offset]
     if sym then
         local syms = table.concat(sym, ", ")
@@ -603,8 +604,9 @@ function proto_ar.dissector(tvb, pinfo, tree)
     local member_number = 1
     local symbols_map = {}
     local member_names_map = {}
+    local obj_index_adjust = {}
     while next_offset and next_offset < tvb:len() do
-        next_offset = dissect_one(tvb, next_offset, pinfo, tree, member_number, symbols_map, member_names_map)
+        next_offset = dissect_one(tvb, next_offset, pinfo, tree, member_number, symbols_map, member_names_map, obj_index_adjust)
         member_number = member_number + 1
     end
     return next_offset
