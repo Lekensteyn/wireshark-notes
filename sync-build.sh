@@ -49,12 +49,12 @@ CXX=${CXX:-c++}
 # For clang, `-O1` (or `-g`?) seems necessary to get something other than
 # "<optimized out>".
 # -O1 -g -gdwarf-4 -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
-_default_flags=\ -fsanitize=address
-_default_flags+=\ -fsanitize=undefined
-_default_flags+=\ -fdiagnostics-color
-_default_flags+=\ -fuse-ld=gold
-# Supported in GCC since 2007 (?), but only in Clang 3.8
+_default_flags=-fdiagnostics-color
+_default_flags+=\ -fuse-ld=lld
+# -fdebug-prefix-map is supported in GCC since 2007 (?), but only in Clang 3.8
 # In GDB, use "dir /tmp/wireshark" to add the source directory anyway.
+# -fmacro-prefix-map (and -ffile-prefix-map) is added in GCC 8,
+# hopefully in Clang 8 as well via https://reviews.llvm.org/D49466
 _default_flags+=" -fdebug-prefix-map=$builddir="
 _default_flags+=" -fdebug-prefix-map=$remotesrcdir="
 CFLAGS="${CFLAGS-$_default_flags -fno-common}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
@@ -124,16 +124,11 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=1 \
         -DCMAKE_INSTALL_RPATH=$(printf %q "$RPATH") \
-        -DENABLE_KERBEROS=1 \
-        -DENABLE_SBC=1 \
         -DENABLE_SMI=0 \
-        -DENABLE_GNUTLS=1 \
-        -DENABLE_LUA=1 \
         -DCMAKE_BUILD_TYPE=Debug \
         -DDISABLE_WERROR=1 \
         -DENABLE_ASAN=1 \
         -DENABLE_UBSAN=1 \
-        -DENABLE_EXTRA_COMPILER_WARNINGS=0 \
         $remotesrcdir \
         -DCMAKE_LIBRARY_PATH=$LIBDIR \
         -DCMAKE_C_FLAGS=$(printf %q "$CFLAGS") \
@@ -158,11 +153,11 @@ trap cleanup EXIT
 
 round=0
 monitor_changes() {
-    # Wait for changes, but ignore .git/ and vim swap files
-    # and also pytest_cache and Python 3 cache directory.
+    # Wait for changes, but ignore .git/, vim swap files, tests, the
+    # pytest_cache and Python 3 cache directory.
     # NOTE: you cannot add multiple --exclude options, they must be combined
     inotifywait -r -m -e close_write \
-        --exclude='/(\.[^/]+)?\.swp?.$|~$|\/(\.git|\.pytest_cache|__pycache__)/' \
+        --exclude='/(\.[^/]+)?\.swp?.$|~$|\/(\.git|test|\.pytest_cache|__pycache__)/' \
         "$localsrcdir/" |
     while read x; do
         printf '\e[36m%s\e[m\n' "Trigger $((++round)): $x" >&2
