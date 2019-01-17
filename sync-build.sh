@@ -50,11 +50,17 @@ CXX=${CXX:-c++}
 # "<optimized out>".
 # -O1 -g -gdwarf-4 -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
 _default_flags=-fdiagnostics-color
-_default_flags+=\ -fuse-ld=lld
+if $CC --version | grep -qE 'clang version ([89]|[1-9][0-9])'; then
+    # Require Clang and at least LLD 8.0 to avoid broken binaries and crashes.
+    # https://bugs.llvm.org/show_bug.cgi?id=37303
+    _default_flags+=\ -fuse-ld=lld
+else
+    _default_flags+=\ -fuse-ld=gold
+fi
 # -fdebug-prefix-map is supported in GCC since 2007 (?), but only in Clang 3.8
 # In GDB, use "dir /tmp/wireshark" to add the source directory anyway.
-# -fmacro-prefix-map (and -ffile-prefix-map) is added in GCC 8,
-# hopefully in Clang 8 as well via https://reviews.llvm.org/D49466
+# -fmacro-prefix-map and -ffile-prefix-map were added in GCC 8. Hopefully it
+# becomes available in Clang 8, see https://bugs.llvm.org/show_bug.cgi?id=38135
 _default_flags+=" -fdebug-prefix-map=$builddir="
 _default_flags+=" -fdebug-prefix-map=$remotesrcdir="
 CFLAGS="${CFLAGS-$_default_flags -fno-common}${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
@@ -73,6 +79,8 @@ fi
 # As extcap/androiddump is located in a subdir, add a special case for that.
 # This is NOT suitable (safe) for release! If you ever move the "run" directory,
 # be sure not to have an untrusted "extcap" directory next to it.
+# This should no longer be necessary once CMAKE_BUILD_RPATH_USE_ORIGIN is set.
+# See https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=15163#c4
 RPATH='$ORIGIN:$ORIGIN/../extcap/..'
 
 # Set envvar force_cmake=1 to call cmake before every build
@@ -101,8 +109,7 @@ done
 # PATH is needed for /usr/bin/core_perl/pod2man (PCAP)
 # ENABLE_QT5=1: install qt5-tools qt5-multimedia on Arch Linux
 # BUILD_sshdump=1: install libssh on Arch Linux
-# 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-gtk3 lib32-krb5
-# lib32-portaudio  lib32-geoip lib32-libnl lib32-lua
+# 32-bit libs on Arch: lib32-libcap lib32-gnutls lib32-krb5 lib32-libnl
 remotecmd="mysh() {
     if [ -e /etc/arch-release ]; then
         # In Arch root, so do a build
