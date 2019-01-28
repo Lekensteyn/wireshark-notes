@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+# Capture from a remote server over SSH which has dumpcap.
+#
+# After copying this file to the extcap folder (see Help -> About
+# for location), you can capture with:
+#
+#   wireshark -i ssh-dumpcap -k \
+#       -oextcap.ssh_dumpcap.remotehost:user@host \
+#       -oextcap.ssh_dumpcap.remoteinterface:nflog:0x1234
+
+#from __future__ import print_function
+
+import argparse, os, sys
+from shlex import quote
+from signal import SIGINT
+
+parser = argparse.ArgumentParser()
+
+# Actions
+parser.add_argument('--extcap-interfaces', action='store_true')
+parser.add_argument('--extcap-dlts', action='store_true')
+parser.add_argument('--extcap-config', action='store_true')
+parser.add_argument('--capture', action='store_true')
+parser.add_argument('--extcap-version')
+
+parser.add_argument('--extcap-interface', metavar='IFACE')
+
+parser.add_argument('--extcap-capture-filter', metavar='CFILTER')
+parser.add_argument('--fifo', metavar='FIFO')
+
+parser.add_argument('--remote-host', metavar='HOST')
+parser.add_argument('--remote-interface', metavar='IFACE')
+
+def extcap_interfaces():
+    print("extcap {version=1.0}")
+    print("interface {value=ssh-dumpcap}{display=Remote dumpcap}")
+
+def extcap_dlts(iface):
+    # Required for the interface to show up in the interace
+    print("dlt {number=147}{name=USER0}{display=Remote capture dependent DLT}")
+
+def extcap_config(iface):
+    print("""
+arg {number=0}{call=--remote-host}{display=Remote SSH server address}{type=string}{tooltip=The remote SSH host. It can be both an IP address or a hostname}{required=true}{group=Server}
+arg {number=1}{call=--remote-interface}{display=Remote interface}{type=string}{tooltip=The remote network interface used for capture}{group=Capture}
+""".strip())
+
+def redirect_stdout(outfile):
+    STDOUT_FILENO = 1
+    try: os.close(STDOUT_FILENO)
+    except OSError: pass
+    fd = os.open(outfile, os.O_WRONLY, 0o600)
+    # TODO this requires Py 3.4, maybe old version can use dup2
+    os.set_inheritable(fd, True)
+    if fd != STDOUT_FILENO:
+        os.dup2(fd, STDOUT_FILENO)
+        os.close(fd)
+
+def extcap_capture(iface, ssh_host, cfilter, outfile):
+    tcpdump_args = [
+        "dumpcap",
+        "-i", iface,
+        "-p",
+        "-q",
+        "-w", "-",
+    ]
+    if cfilter:
+        tcpdump_args += [cfilter]
+    args = [
+        "ssh", ssh_host,
+        " ".join(quote(c) for c in tcpdump_args),
+    ]
+    #import subprocess; subprocess.call(["ls", "-l", "/proc/%d/fd/" % os.getpid()], stdout=2)
+    redirect_stdout(outfile)
+    os.execvp(args[0], args)
+
+def main():
+    args = parser.parse_args()
+    if args.extcap_interfaces:
+        return extcap_interfaces()
+
+    if not args.extcap_interface:
+        parser.error('Missing --extcap-interface option')
+    #if args.extcap_interface != "ssh-dumpcap":
+    #    parser.error('only ssh-dumpcap is supported as interface name')
+
+    iface = args.remote_interface
+
+    if args.extcap_dlts:
+        return extcap_dlts(iface)
+    elif args.extcap_config:
+        return extcap_config(iface)
+    elif args.capture:
+        if not args.fifo:
+            parser.error('Missing --fifo option for --capture')
+        return extcap_capture(iface, args.remote_host, args.extcap_capture_filter, args.fifo)
+    else:
+        parser.error('Missing action')
+        return 1
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(128 + SIGINT)
+    except OSError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
