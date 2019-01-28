@@ -75,14 +75,6 @@ if [[ ${B32:-} ]]; then
     CXXFLAGS="$CXXFLAGS -m32"
 fi
 
-# Override RPATH to allow for relocatable executables.
-# As extcap/androiddump is located in a subdir, add a special case for that.
-# This is NOT suitable (safe) for release! If you ever move the "run" directory,
-# be sure not to have an untrusted "extcap" directory next to it.
-# This should no longer be necessary once CMAKE_BUILD_RPATH_USE_ORIGIN is set.
-# See https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=15163#c4
-RPATH='$ORIGIN:$ORIGIN/../extcap/..'
-
 # Set envvar force_cmake=1 to call cmake before every build
 if [ -n "${force_cmake:-}" ]; then
     force_cmake=true
@@ -129,8 +121,6 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
     cmake \
         -GNinja \
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
-        -DCMAKE_BUILD_WITH_INSTALL_RPATH=1 \
-        -DCMAKE_INSTALL_RPATH=$(printf %q "$RPATH") \
         -DENABLE_SMI=0 \
         -DCMAKE_BUILD_TYPE=Debug \
         -DDISABLE_WERROR=1 \
