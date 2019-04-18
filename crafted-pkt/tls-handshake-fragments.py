@@ -50,17 +50,21 @@ if args.seed is not None:
 hsPerStream = 10
 maxRecordSize = len(clientHelloMsg) * 4
 
-# Fragment handshake message over TLS records,
-# fragment TLS records over TCP segments.
 packets = []
 for i in range(args.count):
     hs = b''.join(CH(hsPerStream * i + j + 1) for j in range(hsPerStream))
     seq = 0x1000
+    records = b''
+    # Fragment handshake message over TLS records.
     while hs:
         # Does not matter that n > maxRecordSize, it is capped anyway.
         n = random.randint(1, maxRecordSize)
         recordData, hs = hs[:n], hs[n:]
-        seg = TLSRecord(recordData)
+        records += TLSRecord(recordData)
+    # Fragment TLS records over TCP segments.
+    while records:
+        n = random.randint(1, maxRecordSize)
+        seg, records = records[:n], records[n:]
         pkt = IP()/TCP(flags='A', seq=seq, sport=0xc000 + i, dport=443)/seg
         packets.append(pkt)
         seq += len(seg)
