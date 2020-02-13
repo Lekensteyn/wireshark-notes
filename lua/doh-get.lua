@@ -11,6 +11,18 @@ local media_type = DissectorTable.get("media_type")
 local http_path = Field.new("http.request.uri")
 local http2_path = Field.new("http2.headers.path")
 
+-- Converts "base64url" to standard "base64" encoding.
+local function from_base64url(b64url)
+    local lastlen = string.len(b64url) % 4
+    local b64 = string.gsub(string.gsub(b64url, "-", "+"), "_", "/")
+    if lastlen == 3 then
+        b64 = b64 .. "="
+    elseif lastlen == 2 then
+        b64 = b64 .. "=="
+    end
+    return b64
+end
+
 function doh_get.dissector(tvb, pinfo, tree)
     local path = http2_path() or http_path()
     if not path then
@@ -25,6 +37,9 @@ function doh_get.dissector(tvb, pinfo, tree)
     if sep ~= "" and sep ~= "&" then
         return
     end
+
+    -- Convert base64url to standard base64 with +/ and padding
+    dns_b64 = from_base64url(dns_b64)
 
     local dns_tvb = ByteArray.new(dns_b64, true):base64_decode():tvb("Base64-decoded DNS")
 
