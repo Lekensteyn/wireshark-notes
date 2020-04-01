@@ -116,6 +116,7 @@ make_fields("zip_archive", {
         version_req     = version_req_def,
         flag            = general_purpose_flags_def,
         comp_method     = compr_method_def,
+        lastmod         = {ProtoField.absolute_time, base.UTC},
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
         crc32           = {ProtoField.uint32, base.HEX},
@@ -140,6 +141,7 @@ make_fields("zip_archive", {
         version_req     = version_req_def,
         flag            = general_purpose_flags_def,
         comp_method     = compr_method_def,
+        lastmod         = {ProtoField.absolute_time, base.UTC},
         lastmod_time    = {ProtoField.uint16, base.HEX},
         lastmod_date    = {ProtoField.uint16, base.HEX},
         crc32           = {ProtoField.uint32, base.HEX},
@@ -261,6 +263,30 @@ local function dissect_extra(hfs, tvb, tree)
     end
 end
 
+-- Given two 16-bit unsigned values, return the seconds since Epoch.
+local function parse_msdos_datetime(date, time)
+    -- Parses MS-DOS date and time to a more common format. See
+    -- https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-dosdatetimetofiletime
+    return os.time({
+        year    = bit.rshift(date, 9) + 1980,
+        month   = bit.rshift(bit.band(date, 0x01e0), 5),
+        day     = bit.band(date, 0x001f),
+        hour    = bit.rshift(time, 11),
+        min     = bit.rshift(bit.band(time, 0x07e0), 5),
+        sec     = bit.band(time, 0x001f) * 2,
+    })
+end
+
+local function add_lastmod(fields, tree, tvb, offset)
+    local tvb_time = tvb(offset, 2)
+    local tvb_date = tvb(offset + 2, 2)
+    local secs = parse_msdos_datetime(tvb_date:le_uint(), tvb_time:le_uint())
+    local time = NSTime.new(secs)
+    local subtree = tree:add(fields.lastmod, tvb(offset, 4), time)
+    subtree:add_le(fields.lastmod_time, tvb_time)
+    subtree:add_le(fields.lastmod_date, tvb_date)
+end
+
 local function dissect_one(tvb, offset, pinfo, tree)
     local orig_offset = offset
     local magic = tvb(offset, 4):le_int()
@@ -271,8 +297,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         dissect_version(hf.entry.version_req,   tvb(offset + 4, 2), subtree)
         dissect_flags(hf.entry.flag,            tvb(offset + 6, 2), subtree)
         subtree:add_le(hf.entry.comp_method,    tvb(offset + 8, 2))
-        subtree:add_le(hf.entry.lastmod_time,   tvb(offset + 10, 2))
-        subtree:add_le(hf.entry.lastmod_date,   tvb(offset + 12, 2))
+        add_lastmod(hf.entry, subtree, tvb, 10)
         subtree:add_le(hf.entry.crc32,          tvb(offset + 14, 4))
         subtree:add_le(hf.entry.size_comp,      tvb(offset + 18, 4))
         subtree:add_le(hf.entry.size_uncomp,    tvb(offset + 22, 4))
@@ -334,8 +359,7 @@ local function dissect_one(tvb, offset, pinfo, tree)
         dissect_version(hf.cd.version_req,      tvb(offset + 6, 2), subtree)
         dissect_flags(hf.cd.flag,               tvb(offset + 8, 2), subtree)
         subtree:add_le(hf.cd.comp_method,       tvb(offset + 10, 2))
-        subtree:add_le(hf.cd.lastmod_time,      tvb(offset + 12, 2))
-        subtree:add_le(hf.cd.lastmod_date,      tvb(offset + 14, 2))
+        add_lastmod(hf.cd, subtree, tvb, offset + 12)
         subtree:add_le(hf.cd.crc32,             tvb(offset + 16, 4))
         subtree:add_le(hf.cd.size_comp,         tvb(offset + 20, 4))
         subtree:add_le(hf.cd.size_uncomp,       tvb(offset + 24, 4))
