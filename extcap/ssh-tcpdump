@@ -22,6 +22,7 @@ parser.add_argument('--extcap-interfaces', action='store_true')
 parser.add_argument('--extcap-dlts', action='store_true')
 parser.add_argument('--extcap-config', action='store_true')
 parser.add_argument('--capture', action='store_true')
+parser.add_argument('--extcap-version')
 
 parser.add_argument('--extcap-interface', metavar='IFACE')
 
@@ -72,13 +73,14 @@ def extcap_capture(iface, cfilter, outfile):
         else:
             ssh_user = os.getenv('USER')
     tcpdump_args = [
-        "sudo",
         "tcpdump",
         "-i", iface,
         "-p",
         "-U",
         "-w", "-",
     ]
+    if ssh_user != 'root':
+        tcpdump_args = ["sudo"] + tcpdump_args
     # Change to a less-privileged user
     if ssh_user:
         tcpdump_args += ["-Z", ssh_user]
