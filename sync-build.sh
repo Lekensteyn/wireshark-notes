@@ -50,13 +50,6 @@ CXX=${CXX:-c++}
 # "<optimized out>".
 # -O1 -g -gdwarf-4 -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
 _default_flags=-fdiagnostics-color
-if $CC --version | grep -qE 'clang version ([89]|[1-9][0-9])'; then
-    # Require Clang and at least LLD 8.0 to avoid broken binaries and crashes.
-    # https://bugs.llvm.org/show_bug.cgi?id=37303
-    _default_flags+=\ -fuse-ld=lld
-else
-    _default_flags+=\ -fuse-ld=gold
-fi
 # -fdebug-prefix-map is supported in GCC since 2007 (?), but only in Clang 3.8
 # In GDB, use "dir /tmp/wireshark" to add the source directory anyway.
 # -fmacro-prefix-map and -ffile-prefix-map were added in GCC 8. Hopefully it
@@ -123,13 +116,14 @@ if $force_cmake || [ ! -e $builddir/CMakeCache.txt ]; then
         -DCMAKE_INSTALL_PREFIX=/tmp/wsroot \
         -DENABLE_SMI=0 \
         -DCMAKE_BUILD_TYPE=Debug \
-        -DDISABLE_WERROR=1 \
+        -DENABLE_WERROR=0 \
         -DENABLE_ASAN=1 \
         -DENABLE_UBSAN=1 \
         $remotesrcdir \
         -DCMAKE_LIBRARY_PATH=$LIBDIR \
         -DCMAKE_C_FLAGS=$(printf %q "$CFLAGS") \
         -DCMAKE_CXX_FLAGS=$(printf %q "$CXXFLAGS") \
+        -DCMAKE_{EXE,SHARED,MODULE}_LINKER_FLAGS=-fuse-ld=lld \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
         $(printf ' %q' "${cmake_options[@]}")
 fi &&
